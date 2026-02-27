@@ -13,8 +13,8 @@ use Filament\Tables\Table;
 class TypeResource extends Resource
 {
     protected static ?string $model = Type::class;
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
-    protected static ?string $navigationGroup = 'بەڕێوەبردنی سیستەم';
+    protected static ?string $navigationIcon = 'heroicon-o-table-cells';
+    protected static ?string $navigationGroup = 'بەرهەمەکان';
     protected static ?string $modelLabel = 'جۆر';
     protected static ?string $pluralModelLabel = 'جۆرەکان';
 
