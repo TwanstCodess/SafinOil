@@ -30,29 +30,43 @@ class SalaryResource extends Resource
                             ->relationship('employee', 'name')
                             ->required()
                             ->reactive()
-                            ->afterStateUpdated(fn ($state, callable $set) =>
-                                $set('amount', Employee::find($state)?->salary ?? 0)
-                            ),
+                            ->afterStateUpdated(function ($state, callable $set, callable $get) {
+                                $employee = Employee::find($state);
+                                if ($employee) {
+                                    $set('amount', $employee->salary);
+                                    // دووبارە حسابکردنی net_amount
+                                    $deductions = $get('deductions') ?? 0;
+                                    $set('net_amount', $employee->salary - $deductions);
+                                }
+                            }),
                         Forms\Components\TextInput::make('amount')
                             ->label('بڕی مووچە')
                             ->numeric()
                             ->required()
-                            ->prefix('دینار'),
+                            ->prefix('دینار')
+                            ->reactive()
+                            ->afterStateUpdated(function ($state, callable $set, callable $get) {
+                                $deductions = $get('deductions') ?? 0;
+                                $set('net_amount', $state - $deductions);
+                            }),
                         Forms\Components\TextInput::make('deductions')
                             ->label('بڕی سزا')
                             ->numeric()
                             ->default(0)
                             ->prefix('دینار')
                             ->reactive()
-                            ->afterStateUpdated(fn ($state, callable $set, callable $get) =>
-                                $set('net_amount', $get('amount') - $state)
-                            ),
+                            ->afterStateUpdated(function ($state, callable $set, callable $get) {
+                                $amount = $get('amount') ?? 0;
+                                $set('net_amount', $amount - $state);
+                            }),
                         Forms\Components\TextInput::make('net_amount')
                             ->label('مووچەی پاک')
                             ->numeric()
                             ->required()
                             ->prefix('دینار')
-                            ->disabled(),
+                            ->disabled()
+                            ->dehydrated(true) // **ئەمە زۆر گرنگە**
+                            ->default(0), // دیفۆڵت 0
                         Forms\Components\DatePicker::make('payment_date')
                             ->label('ڕێکەوتی پێدان')
                             ->required()
@@ -60,10 +74,12 @@ class SalaryResource extends Resource
                         Forms\Components\TextInput::make('month')
                             ->label('مانگ')
                             ->required()
-                            ->maxLength(20),
+                            ->maxLength(20)
+                            ->default(now()->month),
                         Forms\Components\TextInput::make('year')
                             ->label('ساڵ')
-                            ->required(),
+                            ->required()
+                            ->default(now()->year),
                         Forms\Components\Textarea::make('notes')
                             ->label('تێبینی')
                             ->maxLength(65535)
