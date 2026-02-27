@@ -9,7 +9,7 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use app\Models\Category;
+use App\Models\Category;
 
 class SaleResource extends Resource
 {
@@ -30,32 +30,41 @@ class SaleResource extends Resource
                             ->relationship('category', 'name')
                             ->required()
                             ->reactive()
-                            ->afterStateUpdated(fn ($state, callable $set) =>
-                                $set('price_per_liter', Category::find($state)?->current_price ?? 0)
-                            ),
+                            ->afterStateUpdated(function ($state, callable $set, callable $get) {
+                                $category = Category::find($state);
+                                if ($category) {
+                                    $set('price_per_liter', $category->current_price);
+                                    // دووبارە حسابکردنی total_price ئەگەر liters هەبێت
+                                    $liters = $get('liters') ?? 0;
+                                    $set('total_price', $liters * $category->current_price);
+                                }
+                            }),
                         Forms\Components\TextInput::make('liters')
                             ->label('بڕ (لیتر)')
                             ->numeric()
                             ->required()
                             ->reactive()
-                            ->afterStateUpdated(fn ($state, callable $set, callable $get) =>
-                                $set('total_price', $state * $get('price_per_liter'))
-                            ),
+                            ->afterStateUpdated(function ($state, callable $set, callable $get) {
+                                $pricePerLiter = $get('price_per_liter') ?? 0;
+                                $set('total_price', $state * $pricePerLiter);
+                            }),
                         Forms\Components\TextInput::make('price_per_liter')
                             ->label('نرخی لیترێک')
                             ->numeric()
                             ->required()
                             ->prefix('دینار')
                             ->reactive()
-                            ->afterStateUpdated(fn ($state, callable $set, callable $get) =>
-                                $set('total_price', $get('liters') * $state)
-                            ),
+                            ->afterStateUpdated(function ($state, callable $set, callable $get) {
+                                $liters = $get('liters') ?? 0;
+                                $set('total_price', $liters * $state);
+                            }),
                         Forms\Components\TextInput::make('total_price')
                             ->label('کۆی گشتی')
                             ->numeric()
                             ->required()
                             ->prefix('دینار')
-                            ->disabled(),
+                            ->disabled()
+                            ->dehydrated(true), // زۆر گرنگ: ئەمە وادەکات total_price بنێردرێت بۆ داتابەیس
                         Forms\Components\DatePicker::make('sale_date')
                             ->label('ڕێکەوتی فرۆشتن')
                             ->required()

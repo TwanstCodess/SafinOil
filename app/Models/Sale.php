@@ -4,11 +4,19 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Models\Category;
+use App\Models\Cash;
 
 class Sale extends Model
 {
+    protected $table = 'sales';
+
     protected $fillable = [
-        'category_id', 'liters', 'price_per_liter', 'total_price', 'sale_date'
+        'category_id',
+        'liters',
+        'price_per_liter',
+        'total_price',  // دڵنیابە لەوەی ئەمە لێرەدا بێت
+        'sale_date'
     ];
 
     protected $casts = [
@@ -18,6 +26,10 @@ class Sale extends Model
         'sale_date' => 'date',
     ];
 
+    protected $attributes = [
+        'total_price' => 0, // دیفۆڵت 0 بۆ total_price
+    ];
+
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
@@ -25,9 +37,18 @@ class Sale extends Model
 
     protected static function booted()
     {
+        static::creating(function ($sale) {
+            // دڵنیابە لەوەی total_price حساب کراوە
+            if (!$sale->total_price && $sale->liters && $sale->price_per_liter) {
+                $sale->total_price = $sale->liters * $sale->price_per_liter;
+            }
+        });
+
         static::created(function ($sale) {
             // کەمکردنەوەی بەنزین لە کۆگا
-            $sale->category->updateStock($sale->liters, 'subtract');
+            if ($sale->category) {
+                $sale->category->updateStock($sale->liters, 'subtract');
+            }
 
             // زیادکردنی پارە بۆ قاسە
             $cash = Cash::first();
