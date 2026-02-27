@@ -30,32 +30,44 @@ class FuelPurchaseResource extends Resource
                             ->relationship('category', 'name')
                             ->required()
                             ->reactive()
-                            ->afterStateUpdated(fn ($state, callable $set) =>
-                                $set('price_per_liter', Category::find($state)?->purchase_price ?? 0)
-                            ),
+                            ->afterStateUpdated(function ($state, callable $set, callable $get) {
+                                $category = Category::find($state);
+                                if ($category) {
+                                    $set('price_per_liter', $category->purchase_price);
+                                    // دووبارە حسابکردنی total_price ئەگەر liters هەبێت
+                                    $liters = $get('liters') ?? 0;
+                                    $set('total_price', $liters * $category->purchase_price);
+                                }
+                            }),
                         Forms\Components\TextInput::make('liters')
                             ->label('بڕ (لیتر)')
                             ->numeric()
                             ->required()
                             ->reactive()
-                            ->afterStateUpdated(fn ($state, callable $set, callable $get) =>
-                                $set('total_price', $state * $get('price_per_liter'))
-                            ),
+                            ->afterStateUpdated(function ($state, callable $set, callable $get) {
+                                $pricePerLiter = $get('price_per_liter') ?? 0;
+                                $totalPrice = $state * $pricePerLiter;
+                                $set('total_price', $totalPrice);
+                            }),
                         Forms\Components\TextInput::make('price_per_liter')
                             ->label('نرخی لیترێک')
                             ->numeric()
                             ->required()
                             ->prefix('دینار')
                             ->reactive()
-                            ->afterStateUpdated(fn ($state, callable $set, callable $get) =>
-                                $set('total_price', $get('liters') * $state)
-                            ),
+                            ->afterStateUpdated(function ($state, callable $set, callable $get) {
+                                $liters = $get('liters') ?? 0;
+                                $totalPrice = $liters * $state;
+                                $set('total_price', $totalPrice);
+                            }),
                         Forms\Components\TextInput::make('total_price')
                             ->label('کۆی گشتی')
                             ->numeric()
                             ->required()
                             ->prefix('دینار')
-                            ->disabled(),
+                            ->disabled()
+                            ->dehydrated(true) // **ئەمە زۆر گرنگە - وادەکات total_price بنێردرێت**
+                            ->default(0), // دیفۆڵت 0
                         Forms\Components\DatePicker::make('purchase_date')
                             ->label('ڕێکەوتی کڕین')
                             ->required()
