@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use App\Models\Category;
 use App\Models\Cash;
+use Illuminate\Support\Facades\Log; // بۆ logging ئەگەر ویستت
 
 class Sale extends Model
 {
@@ -15,7 +16,7 @@ class Sale extends Model
         'category_id',
         'liters',
         'price_per_liter',
-        'total_price',  // دڵنیابە لەوەی ئەمە لێرەدا بێت
+        'total_price',
         'sale_date'
     ];
 
@@ -26,10 +27,6 @@ class Sale extends Model
         'sale_date' => 'date',
     ];
 
-    protected $attributes = [
-        'total_price' => 0, // دیفۆڵت 0 بۆ total_price
-    ];
-
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
@@ -37,23 +34,27 @@ class Sale extends Model
 
     protected static function booted()
     {
-        static::creating(function ($sale) {
-            // دڵنیابە لەوەی total_price حساب کراوە
-            if (!$sale->total_price && $sale->liters && $sale->price_per_liter) {
-                $sale->total_price = $sale->liters * $sale->price_per_liter;
-            }
-        });
-
         static::created(function ($sale) {
-            // کەمکردنەوەی بەنزین لە کۆگا
-            if ($sale->category) {
-                $sale->category->updateStock($sale->liters, 'subtract');
-            }
+            try {
+                // ١. کەمکردنەوەی بەنزین لە کۆگا
+                if ($sale->category) {
+                    $sale->category->updateStock($sale->liters, 'subtract');
+                }
 
-            // زیادکردنی پارە بۆ قاسە
-            $cash = Cash::first();
-            if ($cash) {
+                // ٢. زیادکردنی پارە بۆ قاسە - ئەمە زۆر گرنگە
+                $cash = Cash::first();
+
+                // ئەگەر قاسە بوونی نییە، دروستی بکە
+                if (!$cash) {
+                    $cash = Cash::initialize(0);
+                }
+
+                // زیادکردنی پارە بۆ قاسە
                 $cash->addIncome($sale->total_price);
+
+            } catch (\Exception $e) {
+                // لە کاتی هەڵەدا، logging بکە
+                Log::error('Error in Sale created event: ' . $e->getMessage());
             }
         });
     }

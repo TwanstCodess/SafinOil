@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use App\Models\Category;
 use App\Models\Cash;
+use Illuminate\Support\Facades\Log;
 
 class FuelPurchase extends Model
 {
@@ -15,7 +16,7 @@ class FuelPurchase extends Model
         'category_id',
         'liters',
         'price_per_liter',
-        'total_price',  // دڵنیابە لەوەی ئەمە لێرەدا بێت
+        'total_price',
         'purchase_date',
         'notes'
     ];
@@ -27,10 +28,6 @@ class FuelPurchase extends Model
         'purchase_date' => 'date',
     ];
 
-    protected $attributes = [
-        'total_price' => 0, // دیفۆڵت 0 بۆ total_price
-    ];
-
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
@@ -38,23 +35,26 @@ class FuelPurchase extends Model
 
     protected static function booted()
     {
-        static::creating(function ($purchase) {
-            // دڵنیابە لەوەی total_price حساب کراوە
-            if (!$purchase->total_price && $purchase->liters && $purchase->price_per_liter) {
-                $purchase->total_price = $purchase->liters * $purchase->price_per_liter;
-            }
-        });
-
         static::created(function ($purchase) {
-            // زیادکردنی بەنزین بۆ کۆگا
-            if ($purchase->category) {
-                $purchase->category->updateStock($purchase->liters, 'add');
-            }
+            try {
+                // ١. زیادکردنی بەنزین بۆ کۆگا
+                if ($purchase->category) {
+                    $purchase->category->updateStock($purchase->liters, 'add');
+                }
 
-            // کەمکردنەوەی پارە لە قاسە
-            $cash = Cash::first();
-            if ($cash) {
+                // ٢. کەمکردنەوەی پارە لە قاسە - ئەمە زۆر گرنگە
+                $cash = Cash::first();
+
+                // ئەگەر قاسە بوونی نییە، دروستی بکە
+                if (!$cash) {
+                    $cash = Cash::initialize(0);
+                }
+
+                // کەمکردنەوەی پارە لە قاسە
                 $cash->addExpense($purchase->total_price);
+
+            } catch (\Exception $e) {
+                Log::error('Error in FuelPurchase created event: ' . $e->getMessage());
             }
         });
     }

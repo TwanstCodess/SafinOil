@@ -58,13 +58,15 @@ class SaleResource extends Resource
                                 $liters = $get('liters') ?? 0;
                                 $set('total_price', $liters * $state);
                             }),
-                        Forms\Components\TextInput::make('total_price')
-                            ->label('کۆی گشتی')
-                            ->numeric()
-                            ->required()
-                            ->prefix('دینار')
-                            ->disabled()
-                            ->dehydrated(true), // زۆر گرنگ: ئەمە وادەکات total_price بنێردرێت بۆ داتابەیس
+
+Forms\Components\TextInput::make('total_price')
+    ->label('کۆی گشتی')
+    ->numeric()
+    ->required()
+    ->prefix('دینار')
+    ->disabled()
+    ->dehydrated(true) // ئەمە زۆر گرنگە
+    ->default(0), // دیفۆڵت 0 // زۆر گرنگ: ئەمە وادەکات total_price بنێردرێت بۆ داتابەیس
                         Forms\Components\DatePicker::make('sale_date')
                             ->label('ڕێکەوتی فرۆشتن')
                             ->required()

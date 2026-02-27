@@ -4,11 +4,18 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Category extends Model
 {
+    protected $table = 'categories';
+
     protected $fillable = [
-        'name', 'type', 'current_price', 'purchase_price', 'stock_liters'
+        'name',
+        'type_id',
+        'current_price',
+        'purchase_price',
+        'stock_liters'
     ];
 
     protected $casts = [
@@ -16,6 +23,11 @@ class Category extends Model
         'purchase_price' => 'decimal:2',
         'stock_liters' => 'decimal:2',
     ];
+
+    public function type(): BelongsTo
+    {
+        return $this->belongsTo(Type::class);
+    }
 
     public function fuelPurchases(): HasMany
     {
@@ -35,5 +47,20 @@ class Category extends Model
             $this->stock_liters -= $liters;
         }
         $this->save();
+
+        return $this;
+    }
+
+    /**
+     * وەرگرتنی جۆری بەرهەم بە شێوازی ڕاستەوخۆ
+     */
+    public function getTypeNameAttribute()
+    {
+        return $this->type?->name ?? 'نەدیاریکراو';
+    }
+
+    public function getTypeKeyAttribute()
+    {
+        return $this->type?->key ?? 'unknown';
     }
 }

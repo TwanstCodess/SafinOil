@@ -9,7 +9,7 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use app\Models\Category;
+use App\Models\Category;
 
 class FuelPurchaseResource extends Resource
 {

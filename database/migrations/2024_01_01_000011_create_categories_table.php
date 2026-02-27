@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('categories', function (Blueprint $table) {
             $table->id();
             $table->string('name');
-            $table->string('type')->comment('fuel, oil, gas');
+            $table->foreignId('type_id')->constrained('types')->onDelete('restrict');
             $table->decimal('current_price', 10, 2);
             $table->decimal('purchase_price', 10, 2);
             $table->integer('stock_liters')->default(0);
