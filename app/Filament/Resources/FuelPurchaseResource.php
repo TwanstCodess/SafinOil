@@ -1,44 +1,70 @@
 <?php
-
+// app/Filament/Resources/FuelPurchaseResource.php
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\FuelPurchaseResource\Pages;
-use App\Filament\Resources\FuelPurchaseResource\RelationManagers;
 use App\Models\FuelPurchase;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
+use app\Models\Category;
 
 class FuelPurchaseResource extends Resource
 {
     protected static ?string $model = FuelPurchase::class;
-
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-truck';
+    protected static ?string $navigationGroup = 'کڕین و فرۆشتن';
+    protected static ?string $modelLabel = 'کڕینی بەنزین';
+    protected static ?string $pluralModelLabel = 'کڕینی بەنزین';
 
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
-                Forms\Components\Select::make('category_id')
-                    ->relationship('category', 'name')
-                    ->required(),
-                Forms\Components\TextInput::make('liters')
-                    ->required()
-                    ->numeric(),
-                Forms\Components\TextInput::make('price_per_liter')
-                    ->required()
-                    ->numeric(),
-                Forms\Components\TextInput::make('total_price')
-                    ->required()
-                    ->numeric(),
-                Forms\Components\DatePicker::make('purchase_date')
-                    ->required(),
-                Forms\Components\Textarea::make('notes')
-                    ->columnSpanFull(),
+                Forms\Components\Section::make('زانیاری کڕین')
+                    ->schema([
+                        Forms\Components\Select::make('category_id')
+                            ->label('کاتیگۆری')
+                            ->relationship('category', 'name')
+                            ->required()
+                            ->reactive()
+                            ->afterStateUpdated(fn ($state, callable $set) =>
+                                $set('price_per_liter', Category::find($state)?->purchase_price ?? 0)
+                            ),
+                        Forms\Components\TextInput::make('liters')
+                            ->label('بڕ (لیتر)')
+                            ->numeric()
+                            ->required()
+                            ->reactive()
+                            ->afterStateUpdated(fn ($state, callable $set, callable $get) =>
+                                $set('total_price', $state * $get('price_per_liter'))
+                            ),
+                        Forms\Components\TextInput::make('price_per_liter')
+                            ->label('نرخی لیترێک')
+                            ->numeric()
+                            ->required()
+                            ->prefix('دینار')
+                            ->reactive()
+                            ->afterStateUpdated(fn ($state, callable $set, callable $get) =>
+                                $set('total_price', $get('liters') * $state)
+                            ),
+                        Forms\Components\TextInput::make('total_price')
+                            ->label('کۆی گشتی')
+                            ->numeric()
+                            ->required()
+                            ->prefix('دینار')
+                            ->disabled(),
+                        Forms\Components\DatePicker::make('purchase_date')
+                            ->label('ڕێکەوتی کڕین')
+                            ->required()
+                            ->default(now()),
+                        Forms\Components\Textarea::make('notes')
+                            ->label('تێبینی')
+                            ->maxLength(65535)
+                            ->columnSpanFull(),
+                    ])->columns(2),
             ]);
     }
 
@@ -47,34 +73,27 @@ class FuelPurchaseResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('category.name')
-                    ->numeric()
+                    ->label('کاتیگۆری')
                     ->sortable(),
                 Tables\Columns\TextColumn::make('liters')
-                    ->numeric()
+                    ->label('بڕ')
+                    ->suffix(' لیتر')
                     ->sortable(),
                 Tables\Columns\TextColumn::make('price_per_liter')
-                    ->numeric()
-                    ->sortable(),
+                    ->label('نرخی لیترێک')
+                    ->money('IQD'),
                 Tables\Columns\TextColumn::make('total_price')
-                    ->numeric()
+                    ->label('کۆی گشتی')
+                    ->money('IQD')
                     ->sortable(),
                 Tables\Columns\TextColumn::make('purchase_date')
+                    ->label('ڕێکەوت')
                     ->date()
                     ->sortable(),
-                Tables\Columns\TextColumn::make('created_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                Tables\Columns\TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
             ])
-            ->filters([
-                //
-            ])
+            ->defaultSort('purchase_date', 'desc')
             ->actions([
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\ViewAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -83,19 +102,11 @@ class FuelPurchaseResource extends Resource
             ]);
     }
 
-    public static function getRelations(): array
-    {
-        return [
-            //
-        ];
-    }
-
     public static function getPages(): array
     {
         return [
             'index' => Pages\ListFuelPurchases::route('/'),
             'create' => Pages\CreateFuelPurchase::route('/create'),
-            'edit' => Pages\EditFuelPurchase::route('/{record}/edit'),
         ];
     }
 }

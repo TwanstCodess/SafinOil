@@ -1,42 +1,57 @@
 <?php
-
+// app/Filament/Resources/CategoryResource.php
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\CategoryResource\Pages;
-use App\Filament\Resources\CategoryResource\RelationManagers;
 use App\Models\Category;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class CategoryResource extends Resource
 {
     protected static ?string $model = Category::class;
-
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-tag';
+    protected static ?string $navigationGroup = 'بەرهەمەکان';
+    protected static ?string $modelLabel = 'کاتیگۆری';
+    protected static ?string $pluralModelLabel = 'کاتیگۆریەکان';
 
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('name')
-                    ->required(),
-                Forms\Components\TextInput::make('type')
-                    ->required(),
-                Forms\Components\TextInput::make('current_price')
-                    ->required()
-                    ->numeric(),
-                Forms\Components\TextInput::make('purchase_price')
-                    ->required()
-                    ->numeric(),
-                Forms\Components\TextInput::make('stock_liters')
-                    ->required()
-                    ->numeric()
-                    ->default(0),
+                Forms\Components\Section::make('زانیاری کاتیگۆری')
+                    ->schema([
+                        Forms\Components\TextInput::make('name')
+                            ->label('ناو')
+                            ->required()
+                            ->maxLength(255),
+                        Forms\Components\Select::make('type')
+                            ->label('جۆر')
+                            ->options([
+                                'fuel' => 'بەنزین',
+                                'oil' => 'ڕۆن',
+                                'gas' => 'گاز',
+                            ])
+                            ->required(),
+                        Forms\Components\TextInput::make('current_price')
+                            ->label('نرخی فرۆشتن (لیترێک)')
+                            ->numeric()
+                            ->required()
+                            ->prefix('دینار'),
+                        Forms\Components\TextInput::make('purchase_price')
+                            ->label('نرخی کڕین (لیترێک)')
+                            ->numeric()
+                            ->required()
+                            ->prefix('دینار'),
+                        Forms\Components\TextInput::make('stock_liters')
+                            ->label('بڕی کۆگا')
+                            ->numeric()
+                            ->required()
+                            ->suffix('لیتر'),
+                    ])->columns(2),
             ]);
     }
 
@@ -45,45 +60,40 @@ class CategoryResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('name')
+                    ->label('ناو')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('type')
-                    ->searchable(),
+                    ->label('جۆر')
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'fuel' => 'warning',
+                        'oil' => 'success',
+                        'gas' => 'info',
+                    })
+                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                        'fuel' => 'بەنزین',
+                        'oil' => 'ڕۆن',
+                        'gas' => 'گاز',
+                    }),
                 Tables\Columns\TextColumn::make('current_price')
-                    ->numeric()
-                    ->sortable(),
+                    ->label('نرخی فرۆشتن')
+                    ->money('IQD'),
                 Tables\Columns\TextColumn::make('purchase_price')
-                    ->numeric()
-                    ->sortable(),
+                    ->label('نرخی کڕین')
+                    ->money('IQD'),
                 Tables\Columns\TextColumn::make('stock_liters')
-                    ->numeric()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('created_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                Tables\Columns\TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-            ])
-            ->filters([
-                //
+                    ->label('کۆگا')
+                    ->suffix(' لیتر'),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ]);
-    }
-
-    public static function getRelations(): array
-    {
-        return [
-            //
-        ];
     }
 
     public static function getPages(): array

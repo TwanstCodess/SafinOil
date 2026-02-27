@@ -1,42 +1,50 @@
 <?php
-
+// app/Filament/Resources/CashResource.php
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\CashResource\Pages;
-use App\Filament\Resources\CashResource\RelationManagers;
 use App\Models\Cash;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class CashResource extends Resource
 {
     protected static ?string $model = Cash::class;
-
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-banknotes';
+    protected static ?string $navigationGroup = 'بەشی دارایی';
+    protected static ?string $modelLabel = 'قاسە';
+    protected static ?string $pluralModelLabel = 'قاسە';
 
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('balance')
-                    ->required()
-                    ->numeric()
-                    ->default(0),
-                Forms\Components\TextInput::make('total_income')
-                    ->required()
-                    ->numeric()
-                    ->default(0),
-                Forms\Components\TextInput::make('total_expense')
-                    ->required()
-                    ->numeric()
-                    ->default(0),
-                Forms\Components\DatePicker::make('last_update')
-                    ->required(),
+                Forms\Components\Section::make('زانیاری قاسە')
+                    ->schema([
+                        Forms\Components\TextInput::make('balance')
+                            ->label('ڕەوشتی قاسە')
+                            ->numeric()
+                            ->required()
+                            ->prefix('دینار')
+                            ->disabled()
+                            ->default(0),
+                        Forms\Components\TextInput::make('total_income')
+                            ->label('کۆی داهات')
+                            ->numeric()
+                            ->disabled()
+                            ->prefix('دینار'),
+                        Forms\Components\TextInput::make('total_expense')
+                            ->label('کۆی خەرجی')
+                            ->numeric()
+                            ->disabled()
+                            ->prefix('دینار'),
+                        Forms\Components\DatePicker::make('last_update')
+                            ->label('دوایین نوێکردنەوە')
+                            ->disabled(),
+                    ])->columns(2),
             ]);
     }
 
@@ -45,44 +53,22 @@ class CashResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('balance')
-                    ->numeric()
+                    ->label('ڕەوشتی قاسە')
+                    ->money('IQD')
                     ->sortable(),
                 Tables\Columns\TextColumn::make('total_income')
-                    ->numeric()
-                    ->sortable(),
+                    ->label('کۆی داهات')
+                    ->money('IQD'),
                 Tables\Columns\TextColumn::make('total_expense')
-                    ->numeric()
-                    ->sortable(),
+                    ->label('کۆی خەرجی')
+                    ->money('IQD'),
                 Tables\Columns\TextColumn::make('last_update')
-                    ->date()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('created_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                Tables\Columns\TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-            ])
-            ->filters([
-                //
+                    ->label('دوایین نوێکردنەوە')
+                    ->date(),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
-            ])
-            ->bulkActions([
-                Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
-                ]),
+                Tables\Actions\ViewAction::make(),
             ]);
-    }
-
-    public static function getRelations(): array
-    {
-        return [
-            //
-        ];
     }
 
     public static function getPages(): array

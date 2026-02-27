@@ -1,41 +1,54 @@
 <?php
-
+// app/Filament/Resources/EmployeeResource.php
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\EmployeeResource\Pages;
-use App\Filament\Resources\EmployeeResource\RelationManagers;
 use App\Models\Employee;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Filament\Tables\Filters\SelectFilter;
 
 class EmployeeResource extends Resource
 {
     protected static ?string $model = Employee::class;
-
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-users';
+    protected static ?string $navigationGroup = 'بەڕێوەبردنی کارمەندان';
+    protected static ?string $modelLabel = 'کارمەند';
+    protected static ?string $pluralModelLabel = 'کارمەندان';
 
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('name')
-                    ->required(),
-                Forms\Components\TextInput::make('position')
-                    ->required(),
-                Forms\Components\TextInput::make('phone')
-                    ->tel(),
-                Forms\Components\TextInput::make('salary')
-                    ->required()
-                    ->numeric(),
-                Forms\Components\DatePicker::make('hire_date')
-                    ->required(),
-                Forms\Components\Toggle::make('is_active')
-                    ->required(),
+                Forms\Components\Section::make('زانیاری کارمەند')
+                    ->schema([
+                        Forms\Components\TextInput::make('name')
+                            ->label('ناو')
+                            ->required()
+                            ->maxLength(255),
+                        Forms\Components\TextInput::make('position')
+                            ->label('پلە')
+                            ->required()
+                            ->maxLength(255),
+                        Forms\Components\TextInput::make('phone')
+                            ->label('ژمارە مۆبایل')
+                            ->tel()
+                            ->maxLength(255),
+                        Forms\Components\TextInput::make('salary')
+                            ->label('مووچە')
+                            ->numeric()
+                            ->required()
+                            ->prefix('دینار'),
+                        Forms\Components\DatePicker::make('hire_date')
+                            ->label('ڕێکەوتی دەستبەکاربوون')
+                            ->required(),
+                        Forms\Components\Toggle::make('is_active')
+                            ->label('چالاکە')
+                            ->default(true),
+                    ])->columns(2),
             ]);
     }
 
@@ -44,46 +57,28 @@ class EmployeeResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('name')
+                    ->label('ناو')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('position')
-                    ->searchable(),
+                    ->label('پلە'),
                 Tables\Columns\TextColumn::make('phone')
-                    ->searchable(),
+                    ->label('مۆبایل'),
                 Tables\Columns\TextColumn::make('salary')
-                    ->numeric()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('hire_date')
-                    ->date()
-                    ->sortable(),
+                    ->label('مووچە')
+                    ->money('IQD'),
                 Tables\Columns\IconColumn::make('is_active')
+                    ->label('چالاکە')
                     ->boolean(),
-                Tables\Columns\TextColumn::make('created_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                Tables\Columns\TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-            ])
-            ->filters([
-                //
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ]);
-    }
-
-    public static function getRelations(): array
-    {
-        return [
-            //
-        ];
     }
 
     public static function getPages(): array
