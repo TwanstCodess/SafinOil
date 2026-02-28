@@ -39,44 +39,53 @@ class FuelPurchase extends Model
         return $this->morphOne(Transaction::class, 'transactionable');
     }
 
-    protected static function booted()
-    {
-        static::created(function ($purchase) {
-            try {
-                // ١. زیادکردنی بەنزین بۆ کۆگا
-                if ($purchase->category) {
-                    $purchase->category->updateStock($purchase->liters, 'add');
-                }
 
-                // ٢. کەمکردنەوەی پارە لە قاسە
-                $cash = Cash::first();
-                if (!$cash) {
-                    $cash = Cash::create([
-                        'balance' => 0,
-                        'total_income' => 0,
-                        'total_expense' => 0,
-                        'last_update' => now(),
-                    ]);
-                }
-
-                // کەمکردنەوەی پارە لە قاسە
-                $cash->addExpense($purchase->total_price);
-
-                // ٣. تۆمارکردنی مامەڵە لە خشتەی transactions
-                Transaction::recordTransaction([
-                    'type' => 'purchase',
-                    'amount' => $purchase->total_price,
-                    'transactionable_type' => self::class,
-                    'transactionable_id' => $purchase->id,
-                    'reference_number' => $purchase->id,
-                    'description' => 'کڕینی ' . number_format($purchase->liters) . ' لیتر ' . ($purchase->category->name ?? 'بەنزین') . ($purchase->notes ? ' - ' . $purchase->notes : ''),
-                    'transaction_date' => $purchase->purchase_date,
-                    'is_income' => false,
-                ]);
-
-            } catch (\Exception $e) {
-                Log::error('Error in FuelPurchase created event: ' . $e->getMessage());
+protected static function booted()
+{
+    static::created(function ($purchase) {
+        try {
+            // ١. زیادکردنی بەنزین بۆ کۆگا
+            if ($purchase->category) {
+                $purchase->category->updateStock($purchase->liters, 'add');
             }
-        });
-    }
+
+            // ٢. کەمکردنەوەی پارە لە قاسە
+            $cash = Cash::first();
+            if (!$cash) {
+                $cash = Cash::create([
+                    'balance' => 0,
+                    'total_income' => 0,
+                    'total_expense' => 0,
+                    'capital' => 0,
+                    'profit' => 0,
+                    'last_update' => now(),
+                ]);
+            }
+
+            $balanceBefore = $cash->balance;
+            $cash->balance -= $purchase->total_price;
+            $cash->total_expense += $purchase->total_price;
+            $cash->last_update = now();
+            $cash->save();
+
+            // ٣. تۆمارکردنی مامەڵە - تەنها بۆ ڕاپۆرت
+            Transaction::create([
+                'transaction_number' => Transaction::generateTransactionNumber(),
+                'type' => 'purchase',
+                'amount' => $purchase->total_price,
+                'balance_before' => $balanceBefore,
+                'balance_after' => $cash->balance,
+                'transactionable_type' => self::class,
+                'transactionable_id' => $purchase->id,
+                'reference_number' => $purchase->id,
+                'description' => 'کڕینی ' . number_format($purchase->liters) . ' لیتر ' . ($purchase->category->name ?? 'بەنزین'),
+                'transaction_date' => $purchase->purchase_date,
+                'created_by' => auth()->user()?->name ?? 'سیستەم',
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error in FuelPurchase created event: ' . $e->getMessage());
+        }
+    });
+}
 }

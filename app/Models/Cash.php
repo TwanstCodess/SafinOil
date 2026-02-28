@@ -14,8 +14,8 @@ class Cash extends Model
         'balance',
         'total_income',
         'total_expense',
-        'capital', // سەرمایە
-        'profit',  // قازانج
+        'capital',
+        'profit',
         'last_update',
     ];
 
@@ -39,7 +39,7 @@ class Cash extends Model
     }
 
     /**
-     * زیادکردنی سەرمایە
+     * زیادکردنی سەرمایە - بەبێ تۆمارکردنی دووبارە لە Transaction
      */
     public function addCapital($amount, $description = null, $date = null)
     {
@@ -51,23 +51,23 @@ class Cash extends Model
         $this->last_update = now();
         $this->save();
 
-        // تۆمارکردنی مامەڵە
-        Transaction::recordTransaction([
+        // تۆمارکردنی مامەڵە - تەنها بۆ ڕاپۆرت، قاسە ناگۆڕێتەوە
+        Transaction::create([
+            'transaction_number' => Transaction::generateTransactionNumber(),
             'type' => 'capital_add',
             'amount' => $amount,
             'balance_before' => $balanceBefore,
             'balance_after' => $this->balance,
             'description' => $description ?? 'زیادکردنی سەرمایە',
             'transaction_date' => $date ?? now(),
-            'is_income' => true,
-            'is_capital' => true,
+            'created_by' => auth()->user()?->name ?? 'سیستەم',
         ]);
 
         return $this;
     }
 
     /**
-     * کەمکردنەوەی سەرمایە (وەرگرتن)
+     * کەمکردنەوەی سەرمایە - بەبێ تۆمارکردنی دووبارە
      */
     public function withdrawCapital($amount, $description = null, $date = null)
     {
@@ -83,23 +83,22 @@ class Cash extends Model
         $this->last_update = now();
         $this->save();
 
-        // تۆمارکردنی مامەڵە
-        Transaction::recordTransaction([
+        Transaction::create([
+            'transaction_number' => Transaction::generateTransactionNumber(),
             'type' => 'capital_withdraw',
             'amount' => $amount,
             'balance_before' => $balanceBefore,
             'balance_after' => $this->balance,
             'description' => $description ?? 'کەمکردنەوەی سەرمایە',
             'transaction_date' => $date ?? now(),
-            'is_income' => false,
-            'is_capital' => true,
+            'created_by' => auth()->user()?->name ?? 'سیستەم',
         ]);
 
         return $this;
     }
 
     /**
-     * زیادکردنی پارە بۆ قاسە (داهات)
+     * زیادکردنی پارە بۆ قاسە (داهات) - بەبێ تۆمارکردنی دووبارە
      */
     public function addIncome($amount, $description = null)
     {
@@ -114,7 +113,7 @@ class Cash extends Model
     }
 
     /**
-     * زیادکردنی خەرجی (کەمکردنەوەی پارە لە قاسە)
+     * زیادکردنی خەرجی (کەمکردنەوەی پارە لە قاسە) - بەبێ تۆمارکردنی دووبارە
      */
     public function addExpense($amount, $description = null)
     {
@@ -129,7 +128,7 @@ class Cash extends Model
     }
 
     /**
-     * زیادکردنی پارە بۆ قاسە (بۆ مامەڵە دەستییەکان)
+     * زیادکردنی پارە بۆ قاسە - بەبێ تۆمارکردنی دووبارە
      */
     public function addMoney($amount, $description = null, $date = null)
     {
@@ -140,22 +139,22 @@ class Cash extends Model
         $this->last_update = now();
         $this->save();
 
-        // تۆمارکردنی مامەڵە
-        Transaction::recordTransaction([
+        Transaction::create([
+            'transaction_number' => Transaction::generateTransactionNumber(),
             'type' => 'cash_add',
             'amount' => $amount,
             'balance_before' => $balanceBefore,
             'balance_after' => $this->balance,
             'description' => $description ?? 'زیادکردنی پارە بۆ قاسە',
             'transaction_date' => $date ?? now(),
-            'is_income' => true,
+            'created_by' => auth()->user()?->name ?? 'سیستەم',
         ]);
 
         return $this;
     }
 
     /**
-     * کەمکردنەوەی پارە لە قاسە (بۆ مامەڵە دەستییەکان)
+     * کەمکردنەوەی پارە لە قاسە - بەبێ تۆمارکردنی دووبارە
      */
     public function withdrawMoney($amount, $description = null, $date = null)
     {
@@ -170,23 +169,20 @@ class Cash extends Model
         $this->last_update = now();
         $this->save();
 
-        // تۆمارکردنی مامەڵە
-        Transaction::recordTransaction([
+        Transaction::create([
+            'transaction_number' => Transaction::generateTransactionNumber(),
             'type' => 'cash_withdraw',
             'amount' => $amount,
             'balance_before' => $balanceBefore,
             'balance_after' => $this->balance,
             'description' => $description ?? 'کەمکردنەوەی پارە لە قاسە',
             'transaction_date' => $date ?? now(),
-            'is_income' => false,
+            'created_by' => auth()->user()?->name ?? 'سیستەم',
         ]);
 
         return $this;
     }
 
-    /**
-     * وەرگرتنی ڕەوشتی قاسە بە شێوازی ڕێکخراو
-     */
     public function getFormattedBalanceAttribute()
     {
         return $this->formatMoney($this->balance);
@@ -212,9 +208,6 @@ class Cash extends Model
         return number_format($amount) . ' دینار';
     }
 
-    /**
-     * دەستپێکردنی قاسە بە بڕی دیاریکراو
-     */
     public static function initialize($initialBalance = 0, $initialCapital = 0)
     {
         return self::create([

@@ -38,44 +38,54 @@ class Sale extends Model
         return $this->morphOne(Transaction::class, 'transactionable');
     }
 
-    protected static function booted()
-    {
-        static::created(function ($sale) {
-            try {
-                // ١. کەمکردنەوەی بەنزین لە کۆگا
-                if ($sale->category) {
-                    $sale->category->updateStock($sale->liters, 'subtract');
-                }
 
-                // ٢. زیادکردنی پارە بۆ قاسە
-                $cash = Cash::first();
-                if (!$cash) {
-                    $cash = Cash::create([
-                        'balance' => 0,
-                        'total_income' => 0,
-                        'total_expense' => 0,
-                        'last_update' => now(),
-                    ]);
-                }
-
-                // زیادکردنی پارە بۆ قاسە
-                $cash->addIncome($sale->total_price);
-
-                // ٣. تۆمارکردنی مامەڵە لە خشتەی transactions
-                Transaction::recordTransaction([
-                    'type' => 'sale',
-                    'amount' => $sale->total_price,
-                    'transactionable_type' => self::class,
-                    'transactionable_id' => $sale->id,
-                    'reference_number' => $sale->id,
-                    'description' => 'فرۆشتنی ' . number_format($sale->liters) . ' لیتر ' . ($sale->category->name ?? 'بەنزین'),
-                    'transaction_date' => $sale->sale_date,
-                    'is_income' => true,
-                ]);
-
-            } catch (\Exception $e) {
-                Log::error('Error in Sale created event: ' . $e->getMessage());
+protected static function booted()
+{
+    static::created(function ($sale) {
+        try {
+            // ١. کەمکردنەوەی بەنزین لە کۆگا
+            if ($sale->category) {
+                $sale->category->updateStock($sale->liters, 'subtract');
             }
-        });
-    }
+
+            // ٢. زیادکردنی پارە بۆ قاسە - ئەمە قاسە دەگۆڕێت
+            $cash = Cash::first();
+            if (!$cash) {
+                $cash = Cash::create([
+                    'balance' => 0,
+                    'total_income' => 0,
+                    'total_expense' => 0,
+                    'capital' => 0,
+                    'profit' => 0,
+                    'last_update' => now(),
+                ]);
+            }
+
+            // زیادکردنی پارە بۆ قاسە
+            $balanceBefore = $cash->balance;
+            $cash->balance += $sale->total_price;
+            $cash->total_income += $sale->total_price;
+            $cash->last_update = now();
+            $cash->save();
+
+            // ٣. تۆمارکردنی مامەڵە - تەنها بۆ ڕاپۆرت، قاسە ناگۆڕێتەوە
+            Transaction::create([
+                'transaction_number' => Transaction::generateTransactionNumber(),
+                'type' => 'sale',
+                'amount' => $sale->total_price,
+                'balance_before' => $balanceBefore,
+                'balance_after' => $cash->balance,
+                'transactionable_type' => self::class,
+                'transactionable_id' => $sale->id,
+                'reference_number' => $sale->id,
+                'description' => 'فرۆشتنی ' . number_format($sale->liters) . ' لیتر ' . ($sale->category->name ?? 'بەنزین'),
+                'transaction_date' => $sale->sale_date,
+                'created_by' => auth()->user()?->name ?? 'سیستەم',
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error in Sale created event: ' . $e->getMessage());
+        }
+    });
+}
 }
