@@ -11,6 +11,7 @@ class SalesPurchasesChartWidget extends ChartWidget
 {
     protected static ?string $heading = 'ڕێژەی فرۆشتن و کڕین (٣٠ ڕۆژی ڕابردوو)';
     protected static ?int $sort = 2;
+  protected int | string | array $columnSpan = 'full';
 
     protected function getData(): array
     {
