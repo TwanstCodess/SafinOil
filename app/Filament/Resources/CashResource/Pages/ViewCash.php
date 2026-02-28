@@ -1,24 +1,21 @@
 <?php
-// app/Filament/Resources/CashResource/Pages/EditCash.php
+// app/Filament/Resources/CashResource/Pages/ViewCash.php
 namespace App\Filament\Resources\CashResource\Pages;
 
 use App\Filament\Resources\CashResource;
 use Filament\Actions;
-use Filament\Resources\Pages\EditRecord;
+use Filament\Resources\Pages\ViewRecord;
 
-class EditCash extends EditRecord
+class ViewCash extends ViewRecord
 {
     protected static string $resource = CashResource::class;
 
     protected function getHeaderActions(): array
     {
         return [
-            Actions\ViewAction::make()
-                ->label('بینین')
-                ->icon('heroicon-m-eye'),
-            Actions\DeleteAction::make()
-                ->label('سڕینەوە')
-                ->icon('heroicon-m-trash'),
+            Actions\EditAction::make()
+                ->label('دەستکاری')
+                ->icon('heroicon-m-pencil'),
             Actions\Action::make('back')
                 ->label('گەڕانەوە')
                 ->url(fn (): string => CashResource::getUrl('index'))
@@ -26,10 +23,4 @@ class EditCash extends EditRecord
                 ->color('gray'),
         ];
     }
-         protected function getRedirectUrl(): string
-    {
-        return $this->getResource()::getUrl('index');
-    }
 }
-
-

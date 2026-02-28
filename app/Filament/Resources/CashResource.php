@@ -525,6 +525,7 @@ class CashResource extends Resource
         return [
             'index' => Pages\ListCashes::route('/'),
             'create' => Pages\CreateCash::route('/create'),
+            'view' => Pages\ViewCash::route('/{record}'),
             'edit' => Pages\EditCash::route('/{record}/edit'),
         ];
     }
