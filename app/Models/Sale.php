@@ -6,7 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use App\Models\Category;
 use App\Models\Cash;
-use Illuminate\Support\Facades\Log; // بۆ logging ئەگەر ویستت
+use App\Models\Transaction;
+use Illuminate\Support\Facades\Log;
 
 class Sale extends Model
 {
@@ -32,6 +33,11 @@ class Sale extends Model
         return $this->belongsTo(Category::class);
     }
 
+    public function transaction()
+    {
+        return $this->morphOne(Transaction::class, 'transactionable');
+    }
+
     protected static function booted()
     {
         static::created(function ($sale) {
@@ -41,19 +47,33 @@ class Sale extends Model
                     $sale->category->updateStock($sale->liters, 'subtract');
                 }
 
-                // ٢. زیادکردنی پارە بۆ قاسە - ئەمە زۆر گرنگە
+                // ٢. زیادکردنی پارە بۆ قاسە
                 $cash = Cash::first();
-
-                // ئەگەر قاسە بوونی نییە، دروستی بکە
                 if (!$cash) {
-                    $cash = Cash::initialize(0);
+                    $cash = Cash::create([
+                        'balance' => 0,
+                        'total_income' => 0,
+                        'total_expense' => 0,
+                        'last_update' => now(),
+                    ]);
                 }
 
                 // زیادکردنی پارە بۆ قاسە
                 $cash->addIncome($sale->total_price);
 
+                // ٣. تۆمارکردنی مامەڵە لە خشتەی transactions
+                Transaction::recordTransaction([
+                    'type' => 'sale',
+                    'amount' => $sale->total_price,
+                    'transactionable_type' => self::class,
+                    'transactionable_id' => $sale->id,
+                    'reference_number' => $sale->id,
+                    'description' => 'فرۆشتنی ' . number_format($sale->liters) . ' لیتر ' . ($sale->category->name ?? 'بەنزین'),
+                    'transaction_date' => $sale->sale_date,
+                    'is_income' => true,
+                ]);
+
             } catch (\Exception $e) {
-                // لە کاتی هەڵەدا، logging بکە
                 Log::error('Error in Sale created event: ' . $e->getMessage());
             }
         });

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use App\Models\Category;
 use App\Models\Cash;
+use App\Models\Transaction;
 use Illuminate\Support\Facades\Log;
 
 class FuelPurchase extends Model
@@ -33,6 +34,11 @@ class FuelPurchase extends Model
         return $this->belongsTo(Category::class);
     }
 
+    public function transaction()
+    {
+        return $this->morphOne(Transaction::class, 'transactionable');
+    }
+
     protected static function booted()
     {
         static::created(function ($purchase) {
@@ -42,16 +48,31 @@ class FuelPurchase extends Model
                     $purchase->category->updateStock($purchase->liters, 'add');
                 }
 
-                // ٢. کەمکردنەوەی پارە لە قاسە - ئەمە زۆر گرنگە
+                // ٢. کەمکردنەوەی پارە لە قاسە
                 $cash = Cash::first();
-
-                // ئەگەر قاسە بوونی نییە، دروستی بکە
                 if (!$cash) {
-                    $cash = Cash::initialize(0);
+                    $cash = Cash::create([
+                        'balance' => 0,
+                        'total_income' => 0,
+                        'total_expense' => 0,
+                        'last_update' => now(),
+                    ]);
                 }
 
                 // کەمکردنەوەی پارە لە قاسە
                 $cash->addExpense($purchase->total_price);
+
+                // ٣. تۆمارکردنی مامەڵە لە خشتەی transactions
+                Transaction::recordTransaction([
+                    'type' => 'purchase',
+                    'amount' => $purchase->total_price,
+                    'transactionable_type' => self::class,
+                    'transactionable_id' => $purchase->id,
+                    'reference_number' => $purchase->id,
+                    'description' => 'کڕینی ' . number_format($purchase->liters) . ' لیتر ' . ($purchase->category->name ?? 'بەنزین') . ($purchase->notes ? ' - ' . $purchase->notes : ''),
+                    'transaction_date' => $purchase->purchase_date,
+                    'is_income' => false,
+                ]);
 
             } catch (\Exception $e) {
                 Log::error('Error in FuelPurchase created event: ' . $e->getMessage());
