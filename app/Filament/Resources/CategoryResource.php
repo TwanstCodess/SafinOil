@@ -40,7 +40,7 @@ class CategoryResource extends Resource
                             ->maxLength(255)
                             ->placeholder('نمونە: بەنزین 95، بەنزین 92، ...'),
 
-                        Select::make('type_id')
+                        Forms\Components\Select::make('type_id')
                             ->label('جۆری بەرهەم')
                             ->options(Type::all()->pluck('name', 'id'))
                             ->required()
