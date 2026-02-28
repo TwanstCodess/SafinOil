@@ -1,32 +1,25 @@
 <?php
-// app/Filament/Resources/SaleResource/Pages/EditSale.php
+// app/Filament/Resources/SaleResource/Pages/ViewSale.php
 namespace App\Filament\Resources\SaleResource\Pages;
 
 use App\Filament\Resources\SaleResource;
 use Filament\Actions;
-use Filament\Resources\Pages\EditRecord;
+use Filament\Resources\Pages\ViewRecord;
 
-class EditSale extends EditRecord
+class ViewSale extends ViewRecord
 {
     protected static string $resource = SaleResource::class;
 
     protected function getHeaderActions(): array
     {
         return [
-            Actions\ViewAction::make()
-                ->label('بینین'),
-            Actions\DeleteAction::make()
-                ->label('سڕینەوە'),
+            Actions\EditAction::make()
+                ->label('دەستکاری'),
             Actions\Action::make('back')
                 ->label('گەڕانەوە')
                 ->url(fn (): string => SaleResource::getUrl('index'))
                 ->icon('heroicon-m-arrow-right')
                 ->color('gray'),
         ];
-    }
-
-    protected function getRedirectUrl(): string
-    {
-        return $this->getResource()::getUrl('index');
     }
 }

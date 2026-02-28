@@ -19,7 +19,6 @@ use Filament\Tables\Filters\Filter;
 use Filament\Forms\Components\DatePicker;
 use Filament\Support\RawJs;
 
-
 class SaleResource extends Resource
 {
     protected static ?string $model = Sale::class;
@@ -169,12 +168,13 @@ class SaleResource extends Resource
                             ->schema([
                                 Forms\Components\Grid::make(2)
                                     ->schema([
-                                        Forms\Components\DatePicker::make('due_date')
-                                            ->label('بەرواری وەستان')
-                                            ->required(fn (callable $get) => $get('payment_type') === 'credit')
-                                            ->visible(fn (callable $get) => $get('payment_type') === 'credit')
-                                            ->minDate(now())
-                                            ->displayFormat('Y/m/d'),
+                                    Forms\Components\DatePicker::make('due_date')
+    ->label('بەرواری وەستان')
+    ->required(fn (callable $get) => $get('payment_type') === 'credit')
+    ->visible(fn (callable $get) => $get('payment_type') === 'credit')
+    // ->minDate(now())  // ئەم هێڵە کۆمێنت بکە یان بیسڕەوە
+    ->displayFormat('Y/m/d'),
+
 
                                         Forms\Components\Placeholder::make('debt_info')
                                             ->label('')
@@ -263,27 +263,27 @@ class SaleResource extends Resource
                 Tables\Columns\TextColumn::make('status')
                     ->label('ڕەوشت')
                     ->badge()
-                    ->color(fn ($record): string => $record->status_color)
-                    ->formatStateUsing(fn ($record): string => $record->status_label)
-                    ->icon(fn ($record): string => match ($record->status) {
+                    ->color(fn ($record): string => $record?->status_color ?? 'gray')
+                    ->formatStateUsing(fn ($record): string => $record?->status_label ?? '-')
+                    ->icon(fn ($record): string => match ($record?->status) {
                         'paid' => 'heroicon-m-check-circle',
                         'partial' => 'heroicon-m-clock',
                         'pending' => 'heroicon-m-x-circle',
                         default => 'heroicon-m-question-mark-circle',
                     })
-                  ->visible(fn ($record): bool => $record && $record->payment_type === 'credit'),
+                    ->visible(fn ($record): bool => $record && $record->payment_type === 'credit'),
 
                 Tables\Columns\TextColumn::make('remaining_amount')
                     ->label('بڕی ماوە')
                     ->money('IQD')
                     ->color('danger')
-                    ->visible(fn ($record) => $record->payment_type === 'credit' && $record->remaining_amount > 0),
+                    ->visible(fn ($record): bool => $record && $record->payment_type === 'credit' && $record->remaining_amount > 0),
 
                 Tables\Columns\TextColumn::make('due_date')
                     ->label('وەستان')
                     ->date('Y/m/d')
-                    ->color(fn ($state): string => $state && $state->isPast() ? 'danger' : 'gray')
-                    ->visible(fn ($record) => $record->payment_type === 'credit'),
+                    ->color(fn ($record): string => ($record && $record->due_date && $record->due_date->isPast()) ? 'danger' : 'gray')
+                    ->visible(fn ($record): bool => $record && $record->payment_type === 'credit'),
 
                 Tables\Columns\TextColumn::make('paid_date')
                     ->label('ڕێکەوتی پارەدان')
@@ -340,7 +340,7 @@ class SaleResource extends Resource
 
                 Tables\Actions\EditAction::make()
                     ->label('دەستکاری')
-                    ->visible(fn ($record): bool => $record->payment_type === 'cash' || $record->status === 'pending'),
+                    ->visible(fn ($record): bool => $record && ($record->payment_type === 'cash' || $record->status === 'pending')),
 
                 Action::make('receive_payment')
                     ->label('وەرگرتنی پارە')
@@ -353,7 +353,7 @@ class SaleResource extends Resource
                             ->required()
                             ->prefix('دینار')
                             ->minValue(1000)
-                            ->maxValue(fn ($record) => $record->remaining_amount)
+                            ->maxValue(fn ($record) => $record?->remaining_amount ?? 0)
                             ->mask(RawJs::make('$money($input)')),
                         Forms\Components\Select::make('payment_method')
                             ->label('شێوازی پارەدان')
@@ -411,6 +411,7 @@ class SaleResource extends Resource
                         }
                     })
                     ->visible(fn ($record): bool =>
+                        $record &&
                         $record->payment_type === 'credit' &&
                         $record->remaining_amount > 0
                     )
@@ -421,14 +422,14 @@ class SaleResource extends Resource
                     ->label('مێژووی پارەدان')
                     ->icon('heroicon-m-clock')
                     ->color(Color::Blue)
-                    ->url(fn ($record): string => route('filament.admin.resources.credit-payments.index', ['sale_id' => $record->id]))
-                    ->visible(fn ($record): bool => $record->payment_type === 'credit'),
+                    ->url(fn ($record): string => $record ? route('filament.admin.resources.credit-payments.index', ['sale_id' => $record->id]) : '#')
+                    ->visible(fn ($record): bool => $record && $record->payment_type === 'credit'),
 
                 Tables\Actions\DeleteAction::make()
                     ->label('سڕینەوە')
                     ->modalHeading('سڕینەوەی فرۆشتن')
                     ->modalDescription('دڵنیای لە سڕینەوەی ئەم فرۆشتنە؟')
-                    ->visible(fn ($record): bool => $record->payment_type === 'cash' || $record->status === 'pending'),
+                    ->visible(fn ($record): bool => $record && ($record->payment_type === 'cash' || $record->status === 'pending')),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

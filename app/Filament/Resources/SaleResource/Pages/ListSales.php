@@ -1,5 +1,5 @@
 <?php
-
+// app/Filament/Resources/SaleResource/Pages/ListSales.php
 namespace App\Filament\Resources\SaleResource\Pages;
 
 use App\Filament\Resources\SaleResource;
@@ -13,7 +13,8 @@ class ListSales extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make(),
+            Actions\CreateAction::make()
+                ->label('فرۆشتنێکی نوێ'),
         ];
     }
 }
