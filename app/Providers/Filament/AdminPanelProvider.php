@@ -67,9 +67,9 @@ class AdminPanelProvider extends PanelProvider
                     ->setIcon('heroicon-o-user')
                     ->setSort(10)
                     ->shouldRegisterNavigation(false) // لە مێنوی لاتەرەدا پیشان مەدە (تەنها لە مێنوی سەرەوە)
-                    ->shouldShowDeleteAccountForm(true) // پیشاندانی فۆرمی سڕینەوەی ئەکاونت
-                    ->shouldShowBrowserSessionsForm(true) // پیشاندانی فۆرمی سێشنەکان
-                    ->shouldShowAvatarForm(true), // پیشاندانی فۆرمی وێنەی پڕۆفایل
+                    ->shouldShowDeleteAccountForm(false) // پیشاندانی فۆرمی سڕینەوەی ئەکاونت
+                    ->shouldShowBrowserSessionsForm(false) // پیشاندانی فۆرمی سێشنەکان
+                    ->shouldShowAvatarForm(false), // پیشاندانی فۆرمی وێنەی پڕۆفایل
             ])
 
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
