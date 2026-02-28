@@ -33,6 +33,9 @@ class AdminPanelProvider extends PanelProvider
             ->font('IBM Plex Sans Arabic')
             ->brandLogoHeight('55px')
             ->maxContentWidth('full')
+                ->spa()
+            ->sidebarCollapsibleOnDesktop()
+
             ->colors([
                 'primary' => Color::Orange,
             ])
