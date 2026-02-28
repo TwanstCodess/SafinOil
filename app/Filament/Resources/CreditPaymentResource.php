@@ -151,7 +151,6 @@ class CreditPaymentResource extends Resource
         return [
             'index' => Pages\ListCreditPayments::route('/'),
             'create' => Pages\CreateCreditPayment::route('/create'),
-            'view' => Pages\ViewCreditPayment::route('/{record}'),
         ];
     }
 }
