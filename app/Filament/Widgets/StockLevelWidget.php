@@ -10,7 +10,7 @@ class StockLevelWidget extends ChartWidget
     protected static ?string $heading = 'ئاستی کۆگا (لیتر)';
     protected static ?int $sort = 6;
 
-        protected int | string | array $columnSpan = 'full';
+
 
     protected function getData(): array
     {
