@@ -13,6 +13,8 @@ return new class extends Migration
             $table->decimal('balance', 15, 2)->default(0);
             $table->decimal('total_income', 15, 2)->default(0);
             $table->decimal('total_expense', 15, 2)->default(0);
+            $table->decimal('capital', 15, 2)->default(0)->after('total_expense');
+            $table->decimal('profit', 15, 2)->default(0)->after('capital');
             $table->date('last_update');
             $table->timestamps();
         });
