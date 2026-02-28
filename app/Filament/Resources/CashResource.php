@@ -61,19 +61,70 @@ class CashResource extends Resource
                     ->sortable()
                     ->size(Tables\Columns\TextColumn\TextColumnSize::Large)
                     ->weight('bold')
-                    ->color('success'),
+                    ->color('success')
+                    ->formatStateUsing(function ($state) {
+                        // نیشاندانی ژمارە بە هەزاران و ملیۆنان
+                        if ($state >= 1000000) {
+                            return number_format($state / 1000000, 2) . ' ملیۆن دینار';
+                        } elseif ($state >= 1000) {
+                            return number_format($state / 1000, 2) . ' هەزار دینار';
+                        }
+                        return number_format($state) . ' دینار';
+                    }),
+
                 Tables\Columns\TextColumn::make('total_income')
                     ->label('کۆی داهات')
                     ->money('IQD')
-                    ->color('success'),
+                    ->color('success')
+                    ->formatStateUsing(function ($state) {
+                        if ($state >= 1000000) {
+                            return number_format($state / 1000000, 2) . ' ملیۆن دینار';
+                        } elseif ($state >= 1000) {
+                            return number_format($state / 1000, 2) . ' هەزار دینار';
+                        }
+                        return number_format($state) . ' دینار';
+                    }),
+
                 Tables\Columns\TextColumn::make('total_expense')
                     ->label('کۆی خەرجی')
                     ->money('IQD')
-                    ->color('danger'),
-                Tables\Columns\TextColumn::make('last_update')
-                    ->label('دوایین نوێکردنەوە')
-                    ->date('Y/m/d')
-                    ->since(),
+                    ->color('danger')
+                    ->formatStateUsing(function ($state) {
+                        if ($state >= 1000000) {
+                            return number_format($state / 1000000, 2) . ' ملیۆن دینار';
+                        } elseif ($state >= 1000) {
+                            return number_format($state / 1000, 2) . ' هەزار دینار';
+                        }
+                        return number_format($state) . ' دینار';
+                    }),
+Tables\Columns\TextColumn::make('last_update')
+    ->label('دوایین نوێکردنەوە')
+    ->formatStateUsing(function ($state) {
+        if (!$state) {
+            return 'هەرگیز نوێ نەکراوەتەوە';
+        }
+
+        $now = now();
+        $diffInDays = $now->diffInDays($state);
+        $diffInHours = $now->diffInHours($state);
+
+        if ($diffInDays > 365) {
+            $years = floor($diffInDays / 365);
+            return $years . ' ساڵ پێش ئێستا';
+        } elseif ($diffInDays > 30) {
+            $months = floor($diffInDays / 30);
+            return $months . ' مانگ پێش ئێستا';
+        } elseif ($diffInDays > 7) {
+            $weeks = floor($diffInDays / 7);
+            return $weeks . ' هەفتە پێش ئێستا';
+        } elseif ($diffInDays >= 1) {
+            return $diffInDays . ' ڕۆژ پێش ئێستا (' . $state->format('Y/m/d') . ')';
+        } elseif ($diffInHours >= 1) {
+            return $diffInHours . ' کاتژمێر پێش ئێستا';
+        } else {
+            return 'ئێستا';
+        }
+    }),
             ])
             ->headerActions([
                 // ئەکشنی زیادکردنی پارە بۆ قاسە
@@ -89,7 +140,8 @@ class CashResource extends Resource
                             ->prefix('دینار')
                             ->minValue(1000)
                             ->placeholder('بڕی پارە داخڵ بکە')
-                            ->autofocus(),
+                            ->autofocus()
+                            ->formatStateUsing(fn ($state) => number_format($state)),
                         Forms\Components\Textarea::make('description')
                             ->label('شوێنەوار (تێبینی)')
                             ->placeholder('نموونە: زیادکردنی پارە لە بانک، قازانج، ...')
@@ -122,7 +174,9 @@ class CashResource extends Resource
                         // نیشاندانی پەیامی سەرکەوتن
                         Notification::make()
                             ->title('پارە بە سەرکەوتوویی زیاد کرا')
-                            ->body(number_format($data['amount']) . ' دینار زیاد کرا بۆ قاسە')
+                            ->body($data['amount'] >= 1000000
+                                ? number_format($data['amount'] / 1000000, 2) . ' ملیۆن دینار زیاد کرا بۆ قاسە'
+                                : (number_format($data['amount'] / 1000, 2) . ' هەزار دینار زیاد کرا بۆ قاسە'))
                             ->success()
                             ->send();
                     })
@@ -143,7 +197,8 @@ class CashResource extends Resource
                             ->required()
                             ->prefix('دینار')
                             ->minValue(1000)
-                            ->placeholder('بڕی پارە داخڵ بکە'),
+                            ->placeholder('بڕی پارە داخڵ بکە')
+                            ->formatStateUsing(fn ($state) => number_format($state)),
                         Forms\Components\Textarea::make('description')
                             ->label('هۆکار')
                             ->required()
@@ -184,7 +239,9 @@ class CashResource extends Resource
 
                         Notification::make()
                             ->title('پارە بە سەرکەوتوویی کەم کرایەوە')
-                            ->body(number_format($data['amount']) . ' دینار کەم کرایەوە لە قاسە')
+                            ->body($data['amount'] >= 1000000
+                                ? number_format($data['amount'] / 1000000, 2) . ' ملیۆن دینار کەم کرایەوە لە قاسە'
+                                : (number_format($data['amount'] / 1000, 2) . ' هەزار دینار کەم کرایەوە لە قاسە'))
                             ->warning()
                             ->send();
                     })
@@ -266,7 +323,8 @@ class CashResource extends Resource
             ->emptyStateActions([
                 Action::make('create')
                     ->label('دروستکردنی قاسە')
-                    ->icon('heroicon-m-plus'),
+                    ->icon('heroicon-m-plus')
+                    ->url(fn (): string => static::getUrl('create')),
             ])
             ->paginated(false); // چونکە تەنها یەک ڕیز هەیە بۆ قاسە
     }
@@ -277,7 +335,6 @@ class CashResource extends Resource
             //
         ];
     }
-
 
 
     public static function getPages(): array
