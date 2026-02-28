@@ -1,0 +1,58 @@
+<?php
+// app/Filament/Widgets/RecentTransactionsWidget.php
+namespace App\Filament\Widgets;
+
+use App\Models\Transaction;
+use Filament\Tables;
+use Filament\Tables\Table;
+use Filament\Widgets\TableWidget as BaseWidget;
+
+class RecentTransactionsWidget extends BaseWidget
+{
+    protected int | string | array $columnSpan = 'full';
+    protected static ?int $sort = 5;
+    protected static ?string $heading = 'دوایین مامەڵەکان';
+
+    public function table(Table $table): Table
+    {
+        return $table
+            ->query(
+                Transaction::query()
+                    ->latest('transaction_date')
+                    ->limit(10)
+            )
+            ->columns([
+                Tables\Columns\TextColumn::make('transaction_number')
+                    ->label('ژ. مامەڵە')
+                    ->badge()
+                    ->color('gray'),
+
+                Tables\Columns\TextColumn::make('type')
+                    ->label('جۆر')
+                    ->badge()
+                    ->color(fn ($record): string => $record->type_color)
+                    ->formatStateUsing(fn ($record): string => $record->type_label),
+
+                Tables\Columns\TextColumn::make('amount')
+                    ->label('بڕ')
+                    ->money('IQD')
+                    ->color(fn ($record): string => $record->is_income ? 'success' : 'danger')
+                    ->weight('bold'),
+
+                Tables\Columns\TextColumn::make('description')
+                    ->label('وەسف')
+                    ->limit(40),
+
+                Tables\Columns\TextColumn::make('transaction_date')
+                    ->label('ڕێکەوت')
+                    ->date('Y/m/d'),
+
+                Tables\Columns\TextColumn::make('balance_after')
+                    ->label('قاسە دوای')
+                    ->money('IQD')
+                    ->color('primary'),
+            ])
+
+            ->paginated(false);
+    }
+}

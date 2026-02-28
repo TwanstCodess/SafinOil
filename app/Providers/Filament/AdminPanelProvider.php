@@ -18,8 +18,6 @@ use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
-
-use Joaopaulolndev\FilamentEditProfile\Pages\EditProfilePage;
 use Filament\Navigation\MenuItem;
 
 class AdminPanelProvider extends PanelProvider
@@ -43,33 +41,25 @@ class AdminPanelProvider extends PanelProvider
                 'primary' => Color::Orange,
             ])
 
-            // **زیادکردنی پروفایل بۆ مێنوی بەکارهێنەر**
+            // مێنوی بەکارهێنەر
             ->userMenuItems([
                 'profile' => MenuItem::make()
                     ->label('پڕۆفایلی من')
-                    ->url(fn (): string => EditProfilePage::getUrl())
+                    ->url(fn (): string => \Joaopaulolndev\FilamentEditProfile\Pages\EditProfilePage::getUrl())
                     ->icon('heroicon-m-user-circle'),
-
-                // ئارادی: جیاکەرەوە
-                'separator' => MenuItem::make()
-                    ->label('')
-                    ->url('#')
-                    ->visible(false),
             ])
 
-            // **زیادکردنی پێکهاتەکانی Edit Profile**
+            // پلاگینەکان
             ->plugins([
                 \Joaopaulolndev\FilamentEditProfile\FilamentEditProfilePlugin::make()
-                    ->slug('my-profile') // URLی پڕۆفایل
+                    ->slug('my-profile')
                     ->setTitle('پڕۆفایلی من')
                     ->setNavigationLabel('پڕۆفایلی من')
-                    ->setNavigationGroup('بەشی کەسی')
                     ->setIcon('heroicon-o-user')
-                    ->setSort(10)
-                    ->shouldRegisterNavigation(false) // لە مێنوی لاتەرەدا پیشان مەدە (تەنها لە مێنوی سەرەوە)
-                    ->shouldShowDeleteAccountForm(false) // پیشاندانی فۆرمی سڕینەوەی ئەکاونت
-                    ->shouldShowBrowserSessionsForm(false) // پیشاندانی فۆرمی سێشنەکان
-                    ->shouldShowAvatarForm(false), // پیشاندانی فۆرمی وێنەی پڕۆفایل
+                    ->shouldRegisterNavigation(false)
+                    ->shouldShowDeleteAccountForm(false)
+                    ->shouldShowBrowserSessionsForm(false)
+                    ->shouldShowAvatarForm(false),
             ])
 
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
@@ -77,11 +67,19 @@ class AdminPanelProvider extends PanelProvider
             ->pages([
                 Pages\Dashboard::class,
             ])
-            ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\\Filament\\Widgets')
+
+            // **ویجێتەکان**
             ->widgets([
                 Widgets\AccountWidget::class,
-                Widgets\FilamentInfoWidget::class,
+                \App\Filament\Widgets\FinancialOverviewWidget::class,
+                \App\Filament\Widgets\SalesPurchasesChartWidget::class,
+                \App\Filament\Widgets\ExpenseBreakdownWidget::class,
+                \App\Filament\Widgets\CreditStatusWidget::class,
+                \App\Filament\Widgets\StockLevelWidget::class,
+                \App\Filament\Widgets\EmployeeStatsWidget::class,
+                \App\Filament\Widgets\RecentTransactionsWidget::class,
             ])
+
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
