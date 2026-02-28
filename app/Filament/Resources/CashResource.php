@@ -497,6 +497,107 @@ class CashResource extends Resource
                         ->modalSubmitActionLabel('زیادکردن')
                         ->modalCancelActionLabel('پاشگەزبوونەوە'),
 
+                         Action::make('withdraw_capital')
+            ->label('کەمکردنەوەی سەرمایە')
+            ->icon('heroicon-o-arrow-trending-down')
+            ->color(Color::Red)
+            ->form([
+                Forms\Components\TextInput::make('amount')
+                    ->label('بڕی سەرمایە')
+                    ->numeric()
+                    ->required()
+                    ->prefix('دینار')
+                    ->minValue(1000)
+                    ->mask(RawJs::make('$money($input)'))
+                    ->helperText(fn () => 'سەرمایەی بوونی: ' . optional(Cash::first())->formatted_capital ?? '0 دینار')
+                    ->rule(function () {
+                        $cash = Cash::first();
+                        return $cash ? 'max:' . $cash->capital : 'max:0';
+                    }),
+
+                Forms\Components\Select::make('reason')
+                    ->label('هۆکاری کەمکردنەوە')
+                    ->options([
+                        'withdraw' => 'وەرگرتنی قازانج',
+                        'loss' => 'زیان',
+                        'investment' => 'وەبەرهێنانی تر',
+                        'personal' => 'پێویستی کەسی',
+                        'other' => 'هۆکاری تر',
+                    ])
+                    ->required(),
+
+                Forms\Components\Textarea::make('description')
+                    ->label('وەسف')
+                    ->required()
+                    ->placeholder('نموونە: وەرگرتنی قازانج بۆ خاوەن پشک')
+                    ->maxLength(255)
+                    ->columnSpanFull(),
+
+                Forms\Components\DatePicker::make('date')
+                    ->label('ڕێکەوتی کەمکردنەوە')
+                    ->default(now())
+                    ->required(),
+
+                Forms\Components\Toggle::make('confirm')
+                    ->label('دڵنیام لە کەمکردنەوەی سەرمایە')
+                    ->required()
+                    ->helperText('ئەم کردارە سەرمایەی کۆمپانیا کەم دەکاتەوە'),
+            ])
+            ->action(function (array $data, $livewire): void {
+                $cash = Cash::first();
+
+                if (!$cash) {
+                    Notification::make()
+                        ->title('هەڵە!')
+                        ->body('قیاسەی دارایی بوونی نییە')
+                        ->danger()
+                        ->send();
+                    return;
+                }
+
+                try {
+                    // دڵنیابوونەوە لە بڕی سەرمایە
+                    if ($cash->capital < $data['amount']) {
+                        throw new \Exception('سەرمایەی پێویست بوونی نییە');
+                    }
+
+                    // دروستکردنی وەسف
+                    $reasonText = match($data['reason']) {
+                        'withdraw' => 'وەرگرتنی قازانج',
+                        'loss' => 'زیانی کۆمپانیا',
+                        'investment' => 'وەبەرهێنانی تر',
+                        'personal' => 'پێویستی کەسی',
+                        default => 'هۆکاری تر',
+                    };
+
+                    $description = $reasonText . ' - ' . $data['description'];
+
+                    // کەمکردنەوەی سەرمایە
+                    $cash->withdrawCapital($data['amount'], $description, $data['date']);
+                    $cash->calculateProfit();
+
+                    Notification::make()
+                        ->title('✅ سەرمایە کەم کرایەوە')
+                        ->body(number_format($data['amount']) . ' دینار لە سەرمایە کەم کرایەوە')
+                        ->success()
+                        ->send();
+
+                } catch (\Exception $e) {
+                    Notification::make()
+                        ->title('هەڵە!')
+                        ->body($e->getMessage())
+                        ->danger()
+                        ->send();
+                }
+            })
+            ->modalHeading('کەمکردنەوەی سەرمایە')
+            ->modalDescription('دڵنیابە لە بڕی کەمکردنەوە')
+            ->modalIcon('heroicon-o-exclamation-triangle')
+            ->modalSubmitActionLabel('کەمکردنەوە')
+            ->modalCancelActionLabel('پاشگەزبوونەوە')
+            ->visible(fn (): bool => optional(Cash::first())->capital > 0),
+
+
                     Action::make('view_report')
                         ->label('ڕاپۆرتی دارایی')
                         ->icon('heroicon-o-document-chart-bar')
