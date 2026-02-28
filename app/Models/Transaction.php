@@ -36,9 +36,6 @@ class Transaction extends Model
         return $this->morphTo();
     }
 
-    /**
-     * وەرگێڕانی جۆری مامەڵە بۆ کوردی
-     */
     public function getTypeLabelAttribute(): string
     {
         return match($this->type) {
@@ -51,13 +48,11 @@ class Transaction extends Model
             'capital_withdraw' => 'کەمکردنەوەی سەرمایە',
             'cash_add' => 'زیادکردنی پارە',
             'cash_withdraw' => 'کەمکردنەوەی پارە',
+            'credit_payment' => 'دانەوەی قەرز',
             default => $this->type,
         };
     }
 
-    /**
-     * وەرگرتنی ڕەنگی جۆری مامەڵە
-     */
     public function getTypeColorAttribute(): string
     {
         return match($this->type) {
@@ -70,29 +65,21 @@ class Transaction extends Model
             'capital_withdraw' => 'danger',
             'cash_add' => 'success',
             'cash_withdraw' => 'danger',
+            'credit_payment' => 'success',
             default => 'gray',
         };
     }
 
-    /**
-     * ئایا مامەڵەکە داهاتە؟
-     */
     public function getIsIncomeAttribute(): bool
     {
-        return in_array($this->type, ['sale', 'cash_add', 'capital_add']);
+        return in_array($this->type, ['sale', 'cash_add', 'capital_add', 'credit_payment']);
     }
 
-    /**
-     * ئایا مامەڵەکە خەرجیە؟
-     */
     public function getIsExpenseAttribute(): bool
     {
         return in_array($this->type, ['purchase', 'expense', 'salary', 'penalty', 'cash_withdraw', 'capital_withdraw']);
     }
 
-    /**
-     * ژمارەی مامەڵە دروست بکە
-     */
     public static function generateTransactionNumber(): string
     {
         $prefix = 'TRX';
@@ -107,12 +94,8 @@ class Transaction extends Model
         return "{$prefix}-{$year}{$month}-{$number}";
     }
 
-    /**
-     * تۆمارکردنی مامەڵە
-     */
     public static function recordTransaction($data)
     {
-        // وەرگرتنی قاسە
         $cash = Cash::first();
 
         if (!$cash) {
@@ -128,7 +111,6 @@ class Transaction extends Model
 
         $balanceBefore = $cash->balance;
 
-        // ئەپدەیت کردنی قاسە
         if ($data['is_income'] ?? false) {
             $cash->balance += $data['amount'];
             $cash->total_income += $data['amount'];
@@ -139,7 +121,6 @@ class Transaction extends Model
         $cash->last_update = now();
         $cash->save();
 
-        // دروستکردنی مامەڵە
         return self::create([
             'transaction_number' => self::generateTransactionNumber(),
             'type' => $data['type'],
