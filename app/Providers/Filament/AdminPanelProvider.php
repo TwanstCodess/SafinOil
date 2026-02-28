@@ -1,4 +1,5 @@
 <?php
+// app/Providers/Filament/AdminPanelProvider.php
 
 namespace App\Providers\Filament;
 
@@ -30,18 +31,47 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
-              ->favicon(asset('logo/logo.PNG'))
+            ->favicon(asset('logo/logo.PNG'))
             ->darkModeBrandLogo(asset('logo/logo.PNG'))
             ->brandLogo(asset('logo/logo.PNG'))
             ->font('IBM Plex Sans Arabic')
             ->brandLogoHeight('55px')
             ->maxContentWidth('full')
-                ->spa()
+            ->spa()
             ->sidebarCollapsibleOnDesktop()
-
             ->colors([
                 'primary' => Color::Orange,
             ])
+
+            // **زیادکردنی پروفایل بۆ مێنوی بەکارهێنەر**
+            ->userMenuItems([
+                'profile' => MenuItem::make()
+                    ->label('پڕۆفایلی من')
+                    ->url(fn (): string => EditProfilePage::getUrl())
+                    ->icon('heroicon-m-user-circle'),
+
+                // ئارادی: جیاکەرەوە
+                'separator' => MenuItem::make()
+                    ->label('')
+                    ->url('#')
+                    ->visible(false),
+            ])
+
+            // **زیادکردنی پێکهاتەکانی Edit Profile**
+            ->plugins([
+                \Joaopaulolndev\FilamentEditProfile\FilamentEditProfilePlugin::make()
+                    ->slug('my-profile') // URLی پڕۆفایل
+                    ->setTitle('پڕۆفایلی من')
+                    ->setNavigationLabel('پڕۆفایلی من')
+                    ->setNavigationGroup('بەشی کەسی')
+                    ->setIcon('heroicon-o-user')
+                    ->setSort(10)
+                    ->shouldRegisterNavigation(false) // لە مێنوی لاتەرەدا پیشان مەدە (تەنها لە مێنوی سەرەوە)
+                    ->shouldShowDeleteAccountForm(true) // پیشاندانی فۆرمی سڕینەوەی ئەکاونت
+                    ->shouldShowBrowserSessionsForm(true) // پیشاندانی فۆرمی سێشنەکان
+                    ->shouldShowAvatarForm(true), // پیشاندانی فۆرمی وێنەی پڕۆفایل
+            ])
+
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
             ->pages([
@@ -51,11 +81,6 @@ class AdminPanelProvider extends PanelProvider
             ->widgets([
                 Widgets\AccountWidget::class,
                 Widgets\FilamentInfoWidget::class,
-            ])
-              ->userMenuItems([
-                'profile' => MenuItem::make()
-                    ->label(fn(): string => __('filament-edit-profile::default.title'))
-                    ->url(fn(): string => EditProfilePage::getUrl()),
             ])
             ->middleware([
                 EncryptCookies::class,
