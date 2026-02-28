@@ -52,16 +52,16 @@ class Cash extends Model
         $this->save();
 
         // تۆمارکردنی مامەڵە - تەنها بۆ ڕاپۆرت، قاسە ناگۆڕێتەوە
-        Transaction::create([
-            'transaction_number' => Transaction::generateTransactionNumber(),
-            'type' => 'capital_add',
-            'amount' => $amount,
-            'balance_before' => $balanceBefore,
-            'balance_after' => $this->balance,
-            'description' => $description ?? 'زیادکردنی سەرمایە',
-            'transaction_date' => $date ?? now(),
-            'created_by' => auth()->user()?->name ?? 'سیستەم',
-        ]);
+Transaction::create([
+    'transaction_number' => Transaction::generateTransactionNumber(),
+    'type' => 'capital_add', // دڵنیابە لەوەی ئەمە stringـە
+    'amount' => $amount,
+    'balance_before' => $balanceBefore,
+    'balance_after' => $this->balance,
+    'description' => $description ?? 'زیادکردنی سەرمایە',
+    'transaction_date' => $date ?? now(),
+    'created_by' => auth()->user()?->name ?? 'سیستەم',
+]);
 
         return $this;
     }
