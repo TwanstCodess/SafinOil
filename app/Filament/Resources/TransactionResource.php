@@ -41,8 +41,11 @@ class TransactionResource extends Resource
                                 'expense' => 'خەرجی',
                                 'salary' => 'مووچە',
                                 'penalty' => 'سزا',
+                                'capital_add' => 'زیادکردنی سەرمایە',
+                                'capital_withdraw' => 'کەمکردنەوەی سەرمایە',
                                 'cash_add' => 'زیادکردنی پارە بۆ قاسە',
                                 'cash_withdraw' => 'کەمکردنەوەی پارە لە قاسە',
+                                'credit_payment' => 'دانەوەی قەرز',
                             ])
                             ->required()
                             ->disabled()
@@ -166,10 +169,14 @@ class TransactionResource extends Resource
                         'expense' => 'خەرجی',
                         'salary' => 'مووچە',
                         'penalty' => 'سزا',
+                        'capital_add' => 'زیادکردنی سەرمایە',
+                        'capital_withdraw' => 'کەمکردنەوەی سەرمایە',
                         'cash_add' => 'زیادکردنی پارە',
                         'cash_withdraw' => 'کەمکردنەوەی پارە',
+                        'credit_payment' => 'دانەوەی قەرز',
                     ])
-                    ->multiple(),
+                    ->multiple()
+                    ->searchable(),
 
                 Filter::make('transaction_date')
                     ->form([
@@ -202,12 +209,31 @@ class TransactionResource extends Resource
                 Tables\Filters\TernaryFilter::make('is_income')
                     ->label('داهات/خەرجی')
                     ->placeholder('هەموو مامەڵەکان')
-                    ->trueLabel('داهات (فرۆشتن و زیادکردن)')
-                    ->falseLabel('خەرجی (کڕین و مووچە و ...)')
+                    ->trueLabel('داهات (فرۆشتن، زیادکردنی پارە، دانەوەی قەرز)')
+                    ->falseLabel('خەرجی (کڕین، مووچە، سزا)')
                     ->queries(
-                        true: fn ($query) => $query->whereIn('type', ['sale', 'cash_add']),
-                        false: fn ($query) => $query->whereIn('type', ['purchase', 'expense', 'salary', 'penalty', 'cash_withdraw']),
+                        true: fn ($query) => $query->whereIn('type', ['sale', 'cash_add', 'capital_add', 'credit_payment']),
+                        false: fn ($query) => $query->whereIn('type', ['purchase', 'expense', 'salary', 'penalty', 'cash_withdraw', 'capital_withdraw']),
                     ),
+
+                // فلتەری تایبەت بۆ دانەوەی قەرز
+                SelectFilter::make('credit_payment')
+                    ->label('دانەوەی قەرز')
+                    ->options([
+                        'yes' => 'دانەوەی قەرز',
+                        'no' => 'جگە لە دانەوەی قەرز',
+                    ])
+                    ->query(function ($query, array $data) {
+                        if (empty($data['value'])) {
+                            return $query;
+                        }
+
+                        return match($data['value']) {
+                            'yes' => $query->where('type', 'credit_payment'),
+                            'no' => $query->where('type', '!=', 'credit_payment'),
+                            default => $query,
+                        };
+                    }),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make()
@@ -235,9 +261,18 @@ class TransactionResource extends Resource
             'edit' => Pages\EditTransaction::route('/{record}/edit'),
         ];
     }
-
     public static function getGloballySearchableAttributes(): array
     {
         return ['transaction_number', 'reference_number', 'description'];
+    }
+
+    public static function getNavigationBadge(): ?string
+    {
+        return static::getModel()::whereDate('transaction_date', today())->count() ?: null;
+    }
+
+    public static function getNavigationBadgeColor(): ?string
+    {
+        return 'success';
     }
 }

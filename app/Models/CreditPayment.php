@@ -1,123 +1,167 @@
 <?php
-// app/Models/CreditPayment.php
+// app/Models/Transaction.php
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
+use App\Models\Cash;
 
-class CreditPayment extends Model
+class Transaction extends Model
 {
-    protected $table = 'credit_payments';
+    protected $table = 'transactions';
 
     protected $fillable = [
-        'sale_id',
-        'customer_id',
+        'transaction_number',
+        'type',
         'amount',
-        'payment_date',
-        'payment_method',
+        'balance_before',
+        'balance_after',
+        'transactionable_type',
+        'transactionable_id',
         'reference_number',
-        'notes',
-        'transaction_number'
+        'description',
+        'transaction_date',
+        'created_by'
     ];
 
     protected $casts = [
         'amount' => 'decimal:2',
-        'payment_date' => 'date',
+        'balance_before' => 'decimal:2',
+        'balance_after' => 'decimal:2',
+        'transaction_date' => 'date',
     ];
 
-    public function sale(): BelongsTo
+    public function transactionable(): MorphTo
     {
-        return $this->belongsTo(Sale::class);
+        return $this->morphTo();
     }
 
-    public function customer(): BelongsTo
+    /**
+     * وەرگێڕانی جۆری مامەڵە بۆ کوردی
+     */
+    public function getTypeLabelAttribute(): string
     {
-        return $this->belongsTo(Customer::class);
+        return match($this->type) {
+            'purchase' => 'کڕین',
+            'sale' => 'فرۆشتن',
+            'expense' => 'خەرجی',
+            'salary' => 'مووچە',
+            'penalty' => 'سزا',
+            'capital_add' => 'زیادکردنی سەرمایە',
+            'capital_withdraw' => 'کەمکردنەوەی سەرمایە',
+            'cash_add' => 'زیادکردنی پارە',
+            'cash_withdraw' => 'کەمکردنەوەی پارە',
+            'credit_payment' => 'دانەوەی قەرز',
+            default => $this->type,
+        };
     }
 
-    protected static function booted()
+    /**
+     * وەرگرتنی ڕەنگی جۆری مامەڵە
+     */
+    public function getTypeColorAttribute(): string
     {
-        static::creating(function ($payment) {
-            // ژمارەی مامەڵە دروستبکە ئەگەر نییە
-            if (!$payment->transaction_number) {
-                $payment->transaction_number = 'TRX-' . time() . '-' . rand(1000, 9999);
-            }
+        return match($this->type) {
+            'purchase' => 'warning',
+            'sale' => 'success',
+            'expense' => 'danger',
+            'salary' => 'info',
+            'penalty' => 'danger',
+            'capital_add' => 'success',
+            'capital_withdraw' => 'danger',
+            'cash_add' => 'success',
+            'cash_withdraw' => 'danger',
+            'credit_payment' => 'success',
+            default => 'gray',
+        };
+    }
 
-            // ژمارەی سەرچاوە دروستبکە ئەگەر نییە
-            if (!$payment->reference_number) {
-                $payment->reference_number = 'REF-' . now()->format('Ymd') . '-' . rand(100, 999);
-            }
+    /**
+     * ئایا مامەڵەکە داهاتە؟
+     */
+    public function getIsIncomeAttribute(): bool
+    {
+        return in_array($this->type, ['sale', 'cash_add', 'capital_add', 'credit_payment']);
+    }
 
-            // چێککردنەوەی بڕی پارەدان لەگەڵ قەرز
-            $customer = Customer::find($payment->customer_id);
-            if ($customer && $payment->amount > $customer->current_debt) {
-                throw new \Exception('بڕی پارەدان زیاترە لە کۆی قەرز!');
-            }
-        });
+    /**
+     * ئایا مامەڵەکە خەرجیە؟
+     */
+    public function getIsExpenseAttribute(): bool
+    {
+        return in_array($this->type, ['purchase', 'expense', 'salary', 'penalty', 'cash_withdraw', 'capital_withdraw']);
+    }
 
-        static::created(function ($payment) {
-            try {
-                // ١. نوێکردنەوەی قەرزی کڕیار
-                if ($payment->customer) {
-                    $payment->customer->updateDebt();
-                }
+    /**
+     * ژمارەی مامەڵە دروست بکە
+     */
+    public static function generateTransactionNumber(): string
+    {
+        $prefix = 'TRX';
+        $year = now()->format('Y');
+        $month = now()->format('m');
+        $lastTransaction = self::whereYear('created_at', now()->year)
+                               ->whereMonth('created_at', now()->month)
+                               ->count();
 
-                // ٢. ئەگەر sale_id هەیە، نوێکردنەوەی ڕەوشتی فرۆشتن
-                if ($payment->sale_id) {
-                    $sale = $payment->sale;
-                    if ($sale) {
-                        $sale->paid_amount += $payment->amount;
-                        $sale->remaining_amount -= $payment->amount;
+        $number = str_pad($lastTransaction + 1, 4, '0', STR_PAD_LEFT);
 
-                        if ($sale->remaining_amount <= 0) {
-                            $sale->status = 'paid';
-                            $sale->paid_date = $payment->payment_date;
-                        } else {
-                            $sale->status = 'partial';
-                        }
-                        $sale->save();
-                    }
-                }
+        return "{$prefix}-{$year}{$month}-{$number}";
+    }
 
-                // ٣. زیادکردنی پارە بۆ قاسە
-                $cash = Cash::first();
-                if (!$cash) {
-                    $cash = Cash::create([
-                        'balance' => 0,
-                        'total_income' => 0,
-                        'total_expense' => 0,
-                        'capital' => 0,
-                        'profit' => 0,
-                        'last_update' => now(),
-                    ]);
-                }
+    /**
+     * تۆمارکردنی مامەڵە
+     */
+    public static function recordTransaction($data)
+    {
+        // وەرگرتنی قاسە
+        $cash = Cash::first();
 
-                $balanceBefore = $cash->balance;
-                $cash->balance += $payment->amount;
-                $cash->total_income += $payment->amount;
-                $cash->last_update = now();
-                $cash->save();
+        if (!$cash) {
+            $cash = Cash::create([
+                'balance' => 0,
+                'total_income' => 0,
+                'total_expense' => 0,
+                'capital' => 0,
+                'profit' => 0,
+                'last_update' => now(),
+            ]);
+        }
 
-                // ٤. تۆمارکردنی مامەڵە (ئەگەر Transaction Model هەیە)
-                if (class_exists('App\Models\Transaction')) {
-                    Transaction::create([
-                        'transaction_number' => Transaction::generateTransactionNumber(),
-                        'type' => 'credit_payment',
-                        'amount' => $payment->amount,
-                        'balance_before' => $balanceBefore,
-                        'balance_after' => $cash->balance,
-                        'transactionable_type' => self::class,
-                        'transactionable_id' => $payment->id,
-                        'reference_number' => $payment->reference_number,
-                        'description' => 'دانەوەی قەرز لەلایەن ' . ($payment->customer->name ?? 'کڕیار') . ' - ' . ($payment->notes ?? ''),
-                        'transaction_date' => $payment->payment_date,
-                        'created_by' => auth()->user()?->name ?? 'سیستەم',
-                    ]);
-                }
+        $balanceBefore = $cash->balance;
 
-            } catch (\Exception $e) {
-                \Log::error('Error in CreditPayment created: ' . $e->getMessage());
-            }
-        });
+        // ئەپدەیت کردنی قاسە
+        if ($data['is_income'] ?? false) {
+            $cash->balance += $data['amount'];
+            $cash->total_income += $data['amount'];
+        } else {
+            $cash->balance -= $data['amount'];
+            $cash->total_expense += $data['amount'];
+        }
+        $cash->last_update = now();
+        $cash->save();
+
+        // دروستکردنی مامەڵە
+        return self::create([
+            'transaction_number' => self::generateTransactionNumber(),
+            'type' => $data['type'],
+            'amount' => $data['amount'],
+            'balance_before' => $balanceBefore,
+            'balance_after' => $cash->balance,
+            'transactionable_type' => $data['transactionable_type'] ?? null,
+            'transactionable_id' => $data['transactionable_id'] ?? null,
+            'reference_number' => $data['reference_number'] ?? null,
+            'description' => $data['description'] ?? null,
+            'transaction_date' => $data['transaction_date'] ?? now(),
+            'created_by' => auth()->user()?->name ?? 'سیستەم',
+        ]);
+    }
+
+    /**
+     * سکۆپ بۆ جۆری credit_payment
+     */
+    public function scopeCreditPayments($query)
+    {
+        return $query->where('type', 'credit_payment');
     }
 }
