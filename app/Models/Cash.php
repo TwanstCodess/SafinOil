@@ -1,5 +1,7 @@
 <?php
+
 // app/Models/Cash.php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
@@ -12,7 +14,7 @@ class Cash extends Model
         'balance',
         'total_income',
         'total_expense',
-        'last_update'
+        'last_update',
     ];
 
     protected $casts = [
@@ -23,41 +25,64 @@ class Cash extends Model
     ];
 
     /**
-     * زیادکردنی پارە بۆ قاسە (فرۆشتن)
+     * زیادکردنی پارە بۆ قاسە
      */
-    public function addIncome($amount)
+    public function addMoney($amount, $description = null)
     {
         $this->balance += $amount;
         $this->total_income += $amount;
         $this->last_update = now();
         $this->save();
 
+        // ئارادی: تۆمارکردنی مامەڵەکە
+        activity()
+            ->performedOn($this)
+            ->withProperties([
+                'amount' => $amount,
+                'type' => 'add',
+                'description' => $description,
+                'previous_balance' => $this->balance - $amount,
+                'new_balance' => $this->balance,
+            ])
+            ->log('پارە زیاد کرا بۆ قاسە');
+
         return $this;
     }
 
     /**
-     * کەمکردنەوەی پارە لە قاسە (کڕین و خەرجی)
+     * کەمکردنەوەی پارە لە قاسە
      */
-    public function addExpense($amount)
+    public function withdrawMoney($amount, $description = null)
     {
+        if ($this->balance < $amount) {
+            throw new \Exception('پارەی پێویست لە قاسەدا نییە');
+        }
+
         $this->balance -= $amount;
         $this->total_expense += $amount;
         $this->last_update = now();
         $this->save();
 
+        // ئارادی: تۆمارکردنی مامەڵەکە
+        activity()
+            ->performedOn($this)
+            ->withProperties([
+                'amount' => $amount,
+                'type' => 'withdraw',
+                'description' => $description,
+                'previous_balance' => $this->balance + $amount,
+                'new_balance' => $this->balance,
+            ])
+            ->log('پارە کەم کرایەوە لە قاسە');
+
         return $this;
     }
 
     /**
-     * دەستپێکردنی قاسە بە بڕی دیاریکراو
+     * وەرگرتنی ڕەوشتی قاسە بە شێوازی ڕێکخراو
      */
-    public static function initialize($initialBalance = 0)
+    public function getFormattedBalanceAttribute()
     {
-        return self::create([
-            'balance' => $initialBalance,
-            'total_income' => 0,
-            'total_expense' => 0,
-            'last_update' => now(),
-        ]);
+        return number_format($this->balance).' دینار';
     }
 }
