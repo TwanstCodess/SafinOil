@@ -12,6 +12,9 @@ use Filament\Tables\Table;
 use Filament\Tables\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Support\Colors\Color;
+use Filament\Tables\Filters\Filter;
+use Filament\Forms\Components\DatePicker;
+use Filament\Tables\Filters\SelectFilter;
 
 class CashResource extends Resource
 {
@@ -97,35 +100,181 @@ class CashResource extends Resource
                         }
                         return number_format($state) . ' دینار';
                     }),
-Tables\Columns\TextColumn::make('last_update')
-    ->label('دوایین نوێکردنەوە')
-    ->formatStateUsing(function ($state) {
-        if (!$state) {
-            return 'هەرگیز نوێ نەکراوەتەوە';
-        }
 
-        $now = now();
-        $diffInDays = $now->diffInDays($state);
-        $diffInHours = $now->diffInHours($state);
+                Tables\Columns\TextColumn::make('last_update')
+                    ->label('دوایین نوێکردنەوە')
+                    ->formatStateUsing(function ($state) {
+                        if (!$state) {
+                            return 'هەرگیز نوێ نەکراوەتەوە';
+                        }
 
-        if ($diffInDays > 365) {
-            $years = floor($diffInDays / 365);
-            return $years . ' ساڵ پێش ئێستا';
-        } elseif ($diffInDays > 30) {
-            $months = floor($diffInDays / 30);
-            return $months . ' مانگ پێش ئێستا';
-        } elseif ($diffInDays > 7) {
-            $weeks = floor($diffInDays / 7);
-            return $weeks . ' هەفتە پێش ئێستا';
-        } elseif ($diffInDays >= 1) {
-            return $diffInDays . ' ڕۆژ پێش ئێستا (' . $state->format('Y/m/d') . ')';
-        } elseif ($diffInHours >= 1) {
-            return $diffInHours . ' کاتژمێر پێش ئێستا';
-        } else {
-            return 'ئێستا';
-        }
-    }),
+                        $now = now();
+                        $diffInDays = $now->diffInDays($state);
+                        $diffInHours = $now->diffInHours($state);
+
+                        if ($diffInDays > 365) {
+                            $years = floor($diffInDays / 365);
+                            return $years . ' ساڵ پێش ئێستا';
+                        } elseif ($diffInDays > 30) {
+                            $months = floor($diffInDays / 30);
+                            return $months . ' مانگ پێش ئێستا';
+                        } elseif ($diffInDays > 7) {
+                            $weeks = floor($diffInDays / 7);
+                            return $weeks . ' هەفتە پێش ئێستا';
+                        } elseif ($diffInDays >= 1) {
+                            return $diffInDays . ' ڕۆژ پێش ئێستا (' . $state->format('Y/m/d') . ')';
+                        } elseif ($diffInHours >= 1) {
+                            return $diffInHours . ' کاتژمێر پێش ئێستا';
+                        } else {
+                            return 'ئێستا';
+                        }
+                    }),
             ])
+
+            // **فلتەرەکان لێرە زیاد کراون**
+            ->filters([
+                // فلتەری بەپێی بڕی پارە
+                Filter::make('balance_range')
+                    ->form([
+                        Forms\Components\TextInput::make('min_balance')
+                            ->label('کەمترین بڕ')
+                            ->numeric()
+                            ->prefix('دینار')
+                            ->placeholder('بۆ نموونە: 100000'),
+                        Forms\Components\TextInput::make('max_balance')
+                            ->label('زۆرترین بڕ')
+                            ->numeric()
+                            ->prefix('دینار')
+                            ->placeholder('بۆ نموونە: 1000000'),
+                    ])
+                    ->query(function ($query, array $data) {
+                        return $query
+                            ->when($data['min_balance'], fn ($q) => $q->where('balance', '>=', $data['min_balance']))
+                            ->when($data['max_balance'], fn ($q) => $q->where('balance', '<=', $data['max_balance']));
+                    })
+                    ->indicateUsing(function (array $data): ?string {
+                        $indicators = [];
+                        if ($data['min_balance'] ?? null) {
+                            $indicators[] = 'کەمترین: ' . number_format($data['min_balance']) . ' دینار';
+                        }
+                        if ($data['max_balance'] ?? null) {
+                            $indicators[] = 'زۆرترین: ' . number_format($data['max_balance']) . ' دینار';
+                        }
+                        return $indicators ? 'بڕی پارە: ' . implode(', ', $indicators) : null;
+                    }),
+
+                // فلتەری بەپێی داهات
+                Filter::make('income_range')
+                    ->form([
+                        Forms\Components\TextInput::make('min_income')
+                            ->label('کەمترین داهات')
+                            ->numeric()
+                            ->prefix('دینار'),
+                        Forms\Components\TextInput::make('max_income')
+                            ->label('زۆرترین داهات')
+                            ->numeric()
+                            ->prefix('دینار'),
+                    ])
+                    ->query(function ($query, array $data) {
+                        return $query
+                            ->when($data['min_income'], fn ($q) => $q->where('total_income', '>=', $data['min_income']))
+                            ->when($data['max_income'], fn ($q) => $q->where('total_income', '<=', $data['max_income']));
+                    })
+                    ->columnSpan(2),
+
+                // فلتەری بەپێی خەرجی
+                Filter::make('expense_range')
+                    ->form([
+                        Forms\Components\TextInput::make('min_expense')
+                            ->label('کەمترین خەرجی')
+                            ->numeric()
+                            ->prefix('دینار'),
+                        Forms\Components\TextInput::make('max_expense')
+                            ->label('زۆرترین خەرجی')
+                            ->numeric()
+                            ->prefix('دینار'),
+                    ])
+                    ->query(function ($query, array $data) {
+                        return $query
+                            ->when($data['min_expense'], fn ($q) => $q->where('total_expense', '>=', $data['min_expense']))
+                            ->when($data['max_expense'], fn ($q) => $q->where('total_expense', '<=', $data['max_expense']));
+                    }),
+
+                // فلتەری بەپێی ڕێکەوتی دوایین نوێکردنەوە
+                Filter::make('last_update_filter')
+                    ->form([
+                        DatePicker::make('from_date')
+                            ->label('لە ڕێکەوتی')
+                            ->placeholder('YYYY-MM-DD'),
+                        DatePicker::make('to_date')
+                            ->label('تا ڕێکەوتی')
+                            ->placeholder('YYYY-MM-DD'),
+                    ])
+                    ->query(function ($query, array $data) {
+                        return $query
+                            ->when($data['from_date'], fn ($q) => $q->whereDate('last_update', '>=', $data['from_date']))
+                            ->when($data['to_date'], fn ($q) => $q->whereDate('last_update', '<=', $data['to_date']));
+                    })
+                    ->indicateUsing(function (array $data): ?string {
+                        if (!$data['from_date'] && !$data['to_date']) {
+                            return null;
+                        }
+
+                        $indicator = 'ڕێکەوتی نوێکردنەوە: ';
+                        if ($data['from_date']) {
+                            $indicator .= 'لە ' . $data['from_date'];
+                        }
+                        if ($data['to_date']) {
+                            $indicator .= ($data['from_date'] ? ' تا ' : 'تا ') . $data['to_date'];
+                        }
+                        return $indicator;
+                    }),
+
+                // فلتەری بەپێی ئاستی قاسە
+                SelectFilter::make('cash_level')
+                    ->label('ئاستی قاسە')
+                    ->options([
+                        'low' => 'کەم (کەمتر لە ١٠٠ هەزار)',
+                        'medium' => 'مامناوەند (١٠٠ هەزار - ١ ملیۆن)',
+                        'high' => 'زۆر (زیاتر لە ١ ملیۆن)',
+                        'very_high' => 'زۆر زۆر (زیاتر لە ١٠ ملیۆن)',
+                    ])
+                    ->query(function ($query, array $data) {
+                        if (empty($data['value'])) {
+                            return $query;
+                        }
+
+                        return match($data['value']) {
+                            'low' => $query->where('balance', '<', 100000),
+                            'medium' => $query->whereBetween('balance', [100000, 1000000]),
+                            'high' => $query->whereBetween('balance', [1000000, 10000000]),
+                            'very_high' => $query->where('balance', '>', 10000000),
+                            default => $query,
+                        };
+                    }),
+
+                // فلتەری پێشنیارکراو (ئەگەر داهات زیاترە یان خەرجی)
+                SelectFilter::make('status')
+                    ->label('ڕەوشتی قاسە')
+                    ->options([
+                        'profit' => 'قازانج (داهات > خەرجی)',
+                        'loss' => 'زیان (داهات < خەرجی)',
+                        'equal' => 'یەکسان (داهات = خەرجی)',
+                    ])
+                    ->query(function ($query, array $data) {
+                        if (empty($data['value'])) {
+                            return $query;
+                        }
+
+                        return match($data['value']) {
+                            'profit' => $query->whereColumn('total_income', '>', 'total_expense'),
+                            'loss' => $query->whereColumn('total_income', '<', 'total_expense'),
+                            'equal' => $query->whereColumn('total_income', '=', 'total_expense'),
+                            default => $query,
+                        };
+                    }),
+            ])
+
             ->headerActions([
                 // ئەکشنی زیادکردنی پارە بۆ قاسە
                 Action::make('add_money')
