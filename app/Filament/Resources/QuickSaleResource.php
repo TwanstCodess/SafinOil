@@ -742,6 +742,7 @@ class QuickSaleResource extends Resource
             ->filters([
                 // فلتەری بەروار (پێشنیاری ئەمڕۆ)
                 Filter::make('sale_date')
+                    ->label('ڕێکەوت')
                     ->form([
                         DatePicker::make('date')
                             ->label('ڕێکەوت')
@@ -886,57 +887,7 @@ class QuickSaleResource extends Resource
 
             ->defaultSort('sale_date', 'desc')
             ->striped()
-            ->poll('30s')
-
-            // کۆی گشتی لە ژێرەوەی خشتە
-            ->footer([
-                'total' => function ($records) {
-                    $totalLiter = 0;
-                    $totalPrice = 0;
-                    $morningTotal = 0;
-                    $eveningTotal = 0;
-
-                    foreach ($records as $record) {
-                        $soldData = $record->sold_data ?? [];
-                        foreach ($soldData as $catId => $liters) {
-                            $totalLiter += $liters;
-                            $category = Category::find($catId);
-                            if ($category) {
-                                $totalPrice += $liters * $category->current_price;
-                            }
-                        }
-
-                        if ($record->shift === 'morning') {
-                            $morningTotal += $record->total_amount;
-                        } else {
-                            $eveningTotal += $record->total_amount;
-                        }
-                    }
-
-                    return new HtmlString('
-                        <div class="bg-gray-50 p-4 rounded-lg mt-4 border border-gray-200">
-                            <div class="grid grid-cols-4 gap-4">
-                                <div class="bg-blue-50 p-3 rounded-lg text-center">
-                                    <span class="text-sm text-gray-600 block">کۆی گشتی فرۆشراو</span>
-                                    <span class="text-2xl font-bold text-blue-600">' . number_format($totalLiter) . ' لیتر</span>
-                                </div>
-                                <div class="bg-green-50 p-3 rounded-lg text-center">
-                                    <span class="text-sm text-gray-600 block">کۆی گشتی (دینار)</span>
-                                    <span class="text-2xl font-bold text-green-600">' . number_format($totalPrice) . ' د.ع</span>
-                                </div>
-                                <div class="bg-yellow-50 p-3 rounded-lg text-center">
-                                    <span class="text-sm text-gray-600 block">کۆی شەفتی بەیانی</span>
-                                    <span class="text-2xl font-bold text-yellow-600">' . number_format($morningTotal) . ' د.ع</span>
-                                </div>
-                                <div class="bg-indigo-50 p-3 rounded-lg text-center">
-                                    <span class="text-sm text-gray-600 block">کۆی شەفتی ئێوارە</span>
-                                    <span class="text-2xl font-bold text-indigo-600">' . number_format($eveningTotal) . ' د.ع</span>
-                                </div>
-                            </div>
-                        </div>
-                    ');
-                },
-            ]);
+            ->poll('30s');
     }
 
     public static function getPages(): array
