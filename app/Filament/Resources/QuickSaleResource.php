@@ -31,19 +31,45 @@ class QuickSaleResource extends Resource
         return $form
             ->schema([
                 Forms\Components\Section::make('زانیاری فرۆشی خێرا')
-                    ->description('تۆمارکردنی بڕی کۆگا لە سەرەتا و کۆتایی ڕۆژدا')
+                    ->description('تۆمارکردنی بڕی کۆگا بۆ هەر شەفتێک')
                     ->icon('heroicon-o-bolt')
                     ->schema([
-                        Forms\Components\Grid::make(2)
+                        Forms\Components\Grid::make(3)
                             ->schema([
                                 Forms\Components\DatePicker::make('sale_date')
                                     ->label('ڕێکەوتی فرۆشتن')
                                     ->required()
                                     ->default(now())
-                                    ->unique(ignoreRecord: true)
                                     ->displayFormat('Y/m/d')
                                     ->native(false)
                                     ->closeOnDateSelection(),
+
+                                Forms\Components\Select::make('shift')
+                                    ->label('شەفت')
+                                    ->options([
+                                        'morning' => '🌅 شەفتی بەیانی',
+                                        'evening' => '🌙 شەفتی ئێوارە',
+                                    ])
+                                    ->required()
+                                    ->default('morning')
+                                    ->reactive()
+                                    ->afterStateUpdated(function ($state, callable $set, callable $get) {
+                                        // دڵنیابوون لە یونیک بوونی (sale_date + shift)
+                                        $date = $get('sale_date');
+                                        if ($date) {
+                                            $exists = QuickSale::whereDate('sale_date', $date)
+                                                ->where('shift', $state)
+                                                ->exists();
+
+                                            if ($exists) {
+                                                Notification::make()
+                                                    ->warning()
+                                                    ->title('ئاگادار!')
+                                                    ->body('ئەم شەفتە پێشتر تۆمار کراوە')
+                                                    ->send();
+                                            }
+                                        }
+                                    }),
 
                                 Forms\Components\Select::make('status')
                                     ->label('ڕەوشت')
@@ -69,9 +95,11 @@ class QuickSaleResource extends Resource
                             ->icon('heroicon-m-sun')
                             ->schema([
                                 Forms\Components\Placeholder::make('initial_info')
-                                    ->content(new HtmlString('
-                                        <div class="bg-blue-50 p-4 rounded-lg">
-                                            <p class="text-blue-700">📊 بڕی کۆگا لە <strong>سەرەتای ڕۆژ</strong>دا داخیل بکە</p>
+                                    ->content(fn (callable $get) => new HtmlString('
+                                        <div class="' . ($get('shift') === 'morning' ? 'bg-yellow-50' : 'bg-indigo-50') . ' p-4 rounded-lg">
+                                            <p class="' . ($get('shift') === 'morning' ? 'text-yellow-700' : 'text-indigo-700') . '">
+                                                ' . ($get('shift') === 'morning' ? '🌅' : '🌙') . ' بڕی کۆگا لە <strong>سەرەتای ' . ($get('shift') === 'morning' ? 'شەفتی بەیانی' : 'شەفتی ئێوارە') . '</strong>دا داخیل بکە
+                                            </p>
                                         </div>
                                     '))
                                     ->columnSpanFull(),
@@ -82,9 +110,11 @@ class QuickSaleResource extends Resource
                             ->icon('heroicon-m-moon')
                             ->schema([
                                 Forms\Components\Placeholder::make('final_info')
-                                    ->content(new HtmlString('
-                                        <div class="bg-indigo-50 p-4 rounded-lg">
-                                            <p class="text-indigo-700">🌙 بڕی کۆگا لە <strong>کۆتایی ڕۆژ</strong>دا داخیل بکە</p>
+                                    ->content(fn (callable $get) => new HtmlString('
+                                        <div class="' . ($get('shift') === 'morning' ? 'bg-yellow-50' : 'bg-indigo-50') . ' p-4 rounded-lg">
+                                            <p class="' . ($get('shift') === 'morning' ? 'text-yellow-700' : 'text-indigo-700') . '">
+                                                ' . ($get('shift') === 'morning' ? '🌅' : '🌙') . ' بڕی کۆگا لە <strong>کۆتایی ' . ($get('shift') === 'morning' ? 'شەفتی بەیانی' : 'شەفتی ئێوارە') . '</strong>دا داخیل بکە
+                                            </p>
                                         </div>
                                     '))
                                     ->columnSpanFull(),
@@ -95,10 +125,9 @@ class QuickSaleResource extends Resource
                             ->icon('heroicon-m-document-text')
                             ->schema([
                                 Forms\Components\Placeholder::make('reported_info')
-                                    ->content(new HtmlString('
+                                    ->content(fn (callable $get) => new HtmlString('
                                         <div class="bg-purple-50 p-4 rounded-lg">
-                                            <p class="text-purple-700">📝 ئەو بڕانە بنووسە کە <strong>خۆت فرۆشتوویت</strong></p>
-                                            <p class="text-purple-600 text-sm mt-2">تکایە دوای داخڵکردنی خوێندنەوەکان، لەم بەشەدا بڕەکانی خۆت بنووسە</p>
+                                            <p class="text-purple-700">📝 ئەو بڕانە بنووسە کە <strong>لە ' . ($get('shift') === 'morning' ? 'شەفتی بەیانی' : 'شەفتی ئێوارە') . '</strong>دا فرۆشتوویت</p>
                                         </div>
                                     '))
                                     ->columnSpanFull(),
@@ -109,9 +138,9 @@ class QuickSaleResource extends Resource
                             ->icon('heroicon-m-chart-bar')
                             ->schema([
                                 Forms\Components\Placeholder::make('summary_info')
-                                    ->content(new HtmlString('
+                                    ->content(fn (callable $get) => new HtmlString('
                                         <div class="bg-green-50 p-4 rounded-lg">
-                                            <p class="text-green-700">📊 پوختەی فرۆشراوەکان و جیاوازیەکان</p>
+                                            <p class="text-green-700">📊 پوختەی فرۆشراوەکان و جیاوازیەکان بۆ ' . ($get('shift') === 'morning' ? 'شەفتی بەیانی' : 'شەفتی ئێوارە') . '</p>
                                         </div>
                                     '))
                                     ->columnSpanFull(),
@@ -128,7 +157,6 @@ class QuickSaleResource extends Resource
         $fields = [];
         $allCategories = QuickSale::getAllCategoriesList();
 
-        // کۆمەڵکردنی کاتیگۆریەکان بەپێی جۆر
         $grouped = [];
         foreach ($allCategories as $catId => $category) {
             $typeKey = $category['type_key'];
@@ -283,7 +311,6 @@ class QuickSaleResource extends Resource
                             "))
                             ->numeric()
                             ->default(function (callable $get) use ($catId) {
-                                // دیفۆڵت وەک فرۆشراوی حسابکراو
                                 $initial = floatval($get("initial_readings.{$catId}") ?? 0);
                                 $final = floatval($get("final_readings.{$catId}") ?? 0);
                                 return $initial - $final;
@@ -382,7 +409,6 @@ class QuickSaleResource extends Resource
 
             $fields[] = Forms\Components\Grid::make(7)
                 ->schema([
-                    // ناوی کاتیگۆری
                     Forms\Components\Placeholder::make("cat_name.{$catId}")
                         ->label('')
                         ->content(new HtmlString(
@@ -392,7 +418,6 @@ class QuickSaleResource extends Resource
                             </div>"
                         )),
 
-                    // خوێندنەوەی سەرەتایی
                     Forms\Components\Placeholder::make("initial_display.{$catId}")
                         ->label('')
                         ->content(function (callable $get) use ($catId) {
@@ -402,7 +427,6 @@ class QuickSaleResource extends Resource
                             );
                         }),
 
-                    // خوێندنەوەی کۆتایی
                     Forms\Components\Placeholder::make("final_display.{$catId}")
                         ->label('')
                         ->content(function (callable $get) use ($catId) {
@@ -412,7 +436,6 @@ class QuickSaleResource extends Resource
                             );
                         }),
 
-                    // فرۆشراو (حسابکراو)
                     Forms\Components\Placeholder::make("sold_display.{$catId}")
                         ->label('')
                         ->content(function (callable $get) use ($catId, $category) {
@@ -431,7 +454,6 @@ class QuickSaleResource extends Resource
                             );
                         }),
 
-                    // فرۆشراوی تۆ
                     Forms\Components\Placeholder::make("reported_display.{$catId}")
                         ->label('')
                         ->content(function (callable $get) use ($catId, $category) {
@@ -449,7 +471,6 @@ class QuickSaleResource extends Resource
                             );
                         }),
 
-                    // جیاوازی (لیتر)
                     Forms\Components\Placeholder::make("diff_liter.{$catId}")
                         ->label('')
                         ->content(function (callable $get) use ($catId) {
@@ -471,7 +492,6 @@ class QuickSaleResource extends Resource
                             );
                         }),
 
-                    // جیاوازی (دینار)
                     Forms\Components\Placeholder::make("diff_price.{$catId}")
                         ->label('')
                         ->content(function (callable $get) use ($catId, $category) {
@@ -674,8 +694,17 @@ class QuickSaleResource extends Resource
                     ->date('Y/m/d')
                     ->sortable()
                     ->searchable()
-                    ->weight('bold')
-                    ->size(Tables\Columns\TextColumn\TextColumnSize::Medium),
+                    ->weight('bold'),
+
+                Tables\Columns\TextColumn::make('shift')
+                    ->label('شەفت')
+                    ->badge()
+                    ->color(fn ($record): string => $record->shift_color)
+                    ->formatStateUsing(fn ($record): string => $record->shift_name)
+                    ->icon(fn (string $state): string => match ($state) {
+                        'morning' => 'heroicon-m-sun',
+                        'evening' => 'heroicon-m-moon',
+                    }),
 
                 Tables\Columns\TextColumn::make('status')
                     ->label('ڕەوشت')
@@ -687,10 +716,6 @@ class QuickSaleResource extends Resource
                     ->formatStateUsing(fn (string $state): string => match ($state) {
                         'open' => 'کراوە',
                         'closed' => 'داخراو',
-                    })
-                    ->icon(fn (string $state): string => match ($state) {
-                        'open' => 'heroicon-m-lock-open',
-                        'closed' => 'heroicon-m-lock-closed',
                     }),
 
                 Tables\Columns\TextColumn::make('total_amount')
@@ -698,8 +723,7 @@ class QuickSaleResource extends Resource
                     ->money('IQD')
                     ->sortable()
                     ->weight('bold')
-                    ->color('success')
-                    ->size(Tables\Columns\TextColumn\TextColumnSize::Medium),
+                    ->color('success'),
 
                 Tables\Columns\TextColumn::make('creator.name')
                     ->label('تۆمارکراو لەلایەن')
@@ -713,6 +737,13 @@ class QuickSaleResource extends Resource
                     ->toggleable(),
             ])
             ->filters([
+                Tables\Filters\SelectFilter::make('shift')
+                    ->label('شەفت')
+                    ->options([
+                        'morning' => 'شەفتی بەیانی',
+                        'evening' => 'شەفتی ئێوارە',
+                    ]),
+
                 Tables\Filters\SelectFilter::make('status')
                     ->label('ڕەوشت')
                     ->options([
@@ -750,7 +781,7 @@ class QuickSaleResource extends Resource
                         ->color('warning'),
 
                     Action::make('close')
-                        ->label('داخستنی ڕۆژ')
+                        ->label('داخستنی شەفت')
                         ->icon('heroicon-m-lock-closed')
                         ->color(Color::Red)
                         ->visible(fn ($record): bool => $record && $record->status === 'open')
@@ -762,13 +793,13 @@ class QuickSaleResource extends Resource
                             ]);
 
                             Notification::make()
-                                ->title('ڕۆژ بە سەرکەوتوویی داخرا')
+                                ->title('شەفت بە سەرکەوتوویی داخرا')
                                 ->success()
                                 ->send();
                         }),
 
                     Action::make('reopen')
-                        ->label('کردنەوەی ڕۆژ')
+                        ->label('کردنەوەی شەفت')
                         ->icon('heroicon-m-lock-open')
                         ->color(Color::Orange)
                         ->visible(fn ($record): bool => $record && $record->status === 'closed')
@@ -780,7 +811,7 @@ class QuickSaleResource extends Resource
                             ]);
 
                             Notification::make()
-                                ->title('ڕۆژ بە سەرکەوتوویی کرایەوە')
+                                ->title('شەفت بە سەرکەوتوویی کرایەوە')
                                 ->success()
                                 ->send();
                         }),
