@@ -569,7 +569,7 @@ class QuickSaleResource extends Resource
                                 }
 
                                 return new HtmlString(
-                                    "<span class='text-danger-600 font-bold text-xl'>" .
+                                    "<span class='text-success-600 font-bold text-xl'>" .
                                     number_format($total) . " لیتر</span>"
                                 );
                             }),
@@ -666,10 +666,32 @@ class QuickSaleResource extends Resource
                         );
                     })
                     ->extraAttributes(['class' => 'text-center']),
+
+                // زیادکردنی کۆی گشتی لیترەکان
+                Forms\Components\Placeholder::make('total_liters_display')
+                    ->label('کۆی گشتی فرۆشراو (لیتر)')
+                    ->content(function (callable $get) {
+                        $total = 0;
+                        $categories = Category::all();
+
+                        foreach ($categories as $category) {
+                            $initial = floatval($get("initial_readings.{$category->id}") ?? 0);
+                            $final = floatval($get("final_readings.{$category->id}") ?? 0);
+                            $sold = $initial - $final;
+                            $total += $sold;
+                        }
+
+                        return new HtmlString(
+                            "<span class='text-info-600 font-bold text-3xl'>" .
+                            number_format($total) . " لیتر</span>"
+                        );
+                    })
+                    ->extraAttributes(['class' => 'text-center mt-4']),
             ])
             ->columnSpanFull();
 
         $fields[] = Forms\Components\Hidden::make('total_amount');
+        $fields[] = Forms\Components\Hidden::make('total_liters');
 
         return $fields;
     }
@@ -677,6 +699,7 @@ class QuickSaleResource extends Resource
     private static function updateCalculations(callable $set, callable $get)
     {
         $total = 0;
+        $totalLiters = 0;
         $categories = Category::all();
 
         foreach ($categories as $category) {
@@ -684,9 +707,11 @@ class QuickSaleResource extends Resource
             $final = floatval($get("final_readings.{$category->id}") ?? 0);
             $sold = $initial - $final;
             $total += $sold * $category->current_price;
+            $totalLiters += $sold;
         }
 
         $set('total_amount', $total);
+        $set('total_liters', $totalLiters);
     }
 
    public static function table(Table $table): Table
@@ -723,12 +748,20 @@ class QuickSaleResource extends Resource
                 }),
 
             Tables\Columns\TextColumn::make('total_amount')
-                ->label('کۆی گشتی')
+                ->label('کۆی گشتی (دینار)')
                 ->money('IQD')
                 ->sortable()
                 ->weight('bold')
                 ->color('success')
                 ->description(fn ($record): string => number_format($record->total_liters, 0) . ' لیتر', 'above'),
+
+            Tables\Columns\TextColumn::make('total_liters')
+                ->label('کۆی گشتی (لیتر)')
+                ->sortable()
+                ->weight('bold')
+                ->color('info')
+                ->formatStateUsing(fn ($state): string => number_format($state, 0) . ' لیتر')
+                ->toggleable(),
 
             Tables\Columns\TextColumn::make('creator.name')
                 ->label('تۆمارکراو لەلایەن')
@@ -903,12 +936,18 @@ class QuickSaleResource extends Resource
                             </div>
                             <div class="grid grid-cols-2 gap-2 mt-3">
                                 <div class="bg-gray-700 bg-opacity-50 rounded p-2">
-                                    <span class="text-xs text-gray-400 block">کۆی فرۆشراو</span>
+                                    <span class="text-xs text-gray-400 block">کۆی لیتر</span>
                                     <span class="text-yellow-400 font-bold text-sm">' . number_format($totals['morning']['total_liters']) . ' لیتر</span>
                                 </div>
                                 <div class="bg-gray-700 bg-opacity-50 rounded p-2">
                                     <span class="text-xs text-gray-400 block">کۆی دینار</span>
                                     <span class="text-yellow-400 font-bold text-sm">' . number_format($totals['morning']['total_amount']) . ' د.ع</span>
+                                </div>
+                            </div>
+                            <div class="mt-2 pt-2 border-t border-gray-700">
+                                <div class="flex justify-between text-xs">
+                                    <span class="text-gray-400">تێکڕا:</span>
+                                    <span class="font-bold text-yellow-400">' . number_format($totals['morning']['total_amount'] / max(1, $totals['morning']['count'])) . ' د.ع</span>
                                 </div>
                             </div>
                         </div>
@@ -926,12 +965,18 @@ class QuickSaleResource extends Resource
                             </div>
                             <div class="grid grid-cols-2 gap-2 mt-3">
                                 <div class="bg-gray-700 bg-opacity-50 rounded p-2">
-                                    <span class="text-xs text-gray-400 block">کۆی فرۆشراو</span>
+                                    <span class="text-xs text-gray-400 block">کۆی لیتر</span>
                                     <span class="text-indigo-400 font-bold text-sm">' . number_format($totals['evening']['total_liters']) . ' لیتر</span>
                                 </div>
                                 <div class="bg-gray-700 bg-opacity-50 rounded p-2">
                                     <span class="text-xs text-gray-400 block">کۆی دینار</span>
                                     <span class="text-indigo-400 font-bold text-sm">' . number_format($totals['evening']['total_amount']) . ' د.ع</span>
+                                </div>
+                            </div>
+                            <div class="mt-2 pt-2 border-t border-gray-700">
+                                <div class="flex justify-between text-xs">
+                                    <span class="text-gray-400">تێکڕا:</span>
+                                    <span class="font-bold text-indigo-400">' . number_format($totals['evening']['total_amount'] / max(1, $totals['evening']['count'])) . ' د.ع</span>
                                 </div>
                             </div>
                         </div>
@@ -959,7 +1004,7 @@ class QuickSaleResource extends Resource
                             </div>
                             <div class="mt-2 pt-2 border-t border-gray-700">
                                 <div class="flex justify-between text-xs">
-                                    <span class="text-gray-400">تێکڕای فرۆشراو:</span>
+                                    <span class="text-gray-400">تێکڕای لیتر:</span>
                                     <span class="font-bold text-green-400">' . number_format(($totals['morning']['total_liters'] + $totals['evening']['total_liters']) / max(1, ($totals['morning']['count'] + $totals['evening']['count']))) . ' لیتر/شەفت</span>
                                 </div>
                             </div>

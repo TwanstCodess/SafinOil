@@ -22,6 +22,7 @@ class QuickSale extends Model
         'reported_sold',
         'differences',
         'total_amount',
+        'total_liters', // زیادکردنی total_liters
         'closed_by',
         'created_by'
     ];
@@ -36,6 +37,7 @@ class QuickSale extends Model
         'reported_sold' => 'array',
         'differences' => 'array',
         'total_amount' => 'decimal:2',
+        'total_liters' => 'decimal:2', // زیادکردنی total_liters
     ];
 
     public function closer(): BelongsTo
@@ -159,7 +161,8 @@ class QuickSale extends Model
         $initial = $this->initial_readings ?? [];
         $final = $this->final_readings ?? [];
         $sold = [];
-        $total = 0;
+        $totalAmount = 0;
+        $totalLiters = 0;
 
         $categories = Category::all();
 
@@ -170,16 +173,19 @@ class QuickSale extends Model
 
             $soldVal = $initialVal - $finalVal;
             $sold[$catId] = $soldVal;
-            $total += $soldVal * $category->current_price;
+            $totalAmount += $soldVal * $category->current_price;
+            $totalLiters += $soldVal;
         }
 
         $this->sold_data = $sold;
-        $this->total_amount = $total;
+        $this->total_amount = $totalAmount;
+        $this->total_liters = $totalLiters;
         $this->save();
 
         return [
             'sold' => $sold,
-            'total' => $total,
+            'total_amount' => $totalAmount,
+            'total_liters' => $totalLiters,
         ];
     }
 
@@ -219,53 +225,67 @@ class QuickSale extends Model
         return $this;
     }
 
+    /**
+     * وەرگرتنی کۆی گشتی لیترەکان
+     */
+    public function getTotalLitersAttribute()
+    {
+        if (isset($this->attributes['total_liters'])) {
+            return $this->attributes['total_liters'];
+        }
 
-    // app/Models/QuickSale.php
-// زیادکردنی ئەم میتۆدە بۆ کۆکردنەوەی کۆی گشتی
+        $total = 0;
+        $readings = $this->readings ?? [];
+        $sold = $this->sold_data ?? [];
 
-public static function getTotalsByDate($date = null)
-{
-    $date = $date ?? now()->format('Y-m-d');
+        // ئەگەر sold_data هەیە، لەوێوە حساب بکە
+        if (!empty($sold)) {
+            foreach ($sold as $liters) {
+                $total += floatval($liters);
+            }
+        }
+        // ئەگەرنا لەسەر بنەمای خوێندنەوەکان حساب بکە
+        elseif (!empty($this->initial_readings) && !empty($this->final_readings)) {
+            foreach ($this->initial_readings as $catId => $initial) {
+                $final = floatval($this->final_readings[$catId] ?? 0);
+                $total += (floatval($initial) - $final);
+            }
+        }
 
-    $query = self::whereDate('sale_date', $date);
-
-    $totals = [
-        'morning' => [
-            'count' => 0,
-            'total_liters' => 0,
-            'total_amount' => 0,
-        ],
-        'evening' => [
-            'count' => 0,
-            'total_liters' => 0,
-            'total_amount' => 0,
-        ],
-    ];
-
-    $sales = $query->get();
-
-    foreach ($sales as $sale) {
-        $shift = $sale->shift;
-        $totals[$shift]['count']++;
-        $totals[$shift]['total_liters'] += $sale->total_liters ?? 0;
-        $totals[$shift]['total_amount'] += $sale->total_amount ?? 0;
+        return $total;
     }
 
-    return $totals;
-}
+    /**
+     * وەرگرتنی کۆی گشتی بەپێی بەروار
+     */
+    public static function getTotalsByDate($date = null)
+    {
+        $date = $date ?? now()->format('Y-m-d');
 
-// ئەم ئەتربیوتە زیاد بکە بۆ کۆی لیتر
-public function getTotalLitersAttribute()
-{
-    $total = 0;
-    $readings = $this->readings ?? [];
+        $query = self::whereDate('sale_date', $date);
 
-    foreach ($readings as $categoryId => $reading) {
-        $initial = floatval($reading['initial'] ?? 0);
-        $final = floatval($reading['final'] ?? 0);
-        $total += ($initial - $final);
+        $totals = [
+            'morning' => [
+                'count' => 0,
+                'total_liters' => 0,
+                'total_amount' => 0,
+            ],
+            'evening' => [
+                'count' => 0,
+                'total_liters' => 0,
+                'total_amount' => 0,
+            ],
+        ];
+
+        $sales = $query->get();
+
+        foreach ($sales as $sale) {
+            $shift = $sale->shift;
+            $totals[$shift]['count']++;
+            $totals[$shift]['total_liters'] += $sale->total_liters ?? 0;
+            $totals[$shift]['total_amount'] += $sale->total_amount ?? 0;
+        }
+
+        return $totals;
     }
-
-    return $total;
-}
 }
