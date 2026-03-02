@@ -1,5 +1,4 @@
 <?php
-// app/Filament/Resources/QuickSaleResource.php
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\QuickSaleResource\Pages;
