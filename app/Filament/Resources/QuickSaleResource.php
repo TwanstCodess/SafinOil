@@ -569,7 +569,7 @@ class QuickSaleResource extends Resource
                                 }
 
                                 return new HtmlString(
-                                    "<span class='text-success-600 font-bold text-xl'>" .
+                                    "<span class='text-danger-600 font-bold text-xl'>" .
                                     number_format($total) . " لیتر</span>"
                                 );
                             }),
