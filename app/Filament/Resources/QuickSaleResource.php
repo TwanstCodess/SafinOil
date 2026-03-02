@@ -300,10 +300,38 @@ class QuickSaleResource extends Resource
         return $fields;
     }
 
+// app/Filament/Resources/QuickSaleResource.php (بەشی Summary)
+
 private static function getSummaryFields(): array
 {
     $fields = [];
     $allCategories = QuickSale::getAllCategoriesList();
+
+    // دوگمەی کۆپی کردن
+    $fields[] = Forms\Components\Actions::make([
+        Forms\Components\Actions\Action::make('copyToReported')
+            ->label('کۆپی کردنی فرۆشراوەکان بۆ فرۆشراوی تۆ')
+            ->icon('heroicon-m-document-duplicate')
+            ->color('success')
+            ->action(function (callable $set, callable $get) use ($allCategories) {
+                foreach ($allCategories as $catId => $category) {
+                    $initial = floatval($get("initial_readings.{$catId}") ?? 0);
+                    $final = floatval($get("final_readings.{$catId}") ?? 0);
+                    $sold = $initial - $final;
+                    $set("reported_sold.{$catId}", $sold);
+                }
+
+                // دوای کۆپی کردن، total_amount دووبارە حساب بکە
+                self::updateCalculations($set, $get);
+
+                \Filament\Notifications\Notification::make()
+                    ->title('فرۆشراوەکان بە سەرکەوتوویی کۆپی کران')
+                    ->success()
+                    ->send();
+            })
+            ->extraAttributes(['class' => 'mb-4']),
+    ])
+    ->columnSpanFull();
 
     // سەرەتا ناونیشانی ستوونەکان
     $fields[] = Forms\Components\Grid::make(5)
@@ -392,11 +420,14 @@ private static function getSummaryFields(): array
                         );
                     }),
 
-                // فرۆشراوی تۆ
+                // فرۆشراوی تۆ (ئێستا وەک فرۆشراو ڕێک دەخرێت)
                 Forms\Components\Placeholder::make("reported_display.{$catId}")
                     ->label('')
                     ->content(function (callable $get) use ($catId, $category) {
-                        $reported = floatval($get("reported_sold.{$catId}") ?? 0);
+                        $initial = floatval($get("initial_readings.{$catId}") ?? 0);
+                        $final = floatval($get("final_readings.{$catId}") ?? 0);
+                        $sold = $initial - $final;
+                        $reported = floatval($get("reported_sold.{$catId}") ?? $sold); // دیفۆڵت وەک فرۆشراو
                         $totalPrice = $reported * $category['price'];
 
                         return new HtmlString(
@@ -413,7 +444,7 @@ private static function getSummaryFields(): array
 
     // جیاوازیەکان
     $fields[] = Forms\Components\Section::make('جیاوازیەکان')
-        ->description('جیاوازی نێوان فرۆشراوی حسابکراو و فرۆشراوی تۆ')
+        ->description('جیاوازی نێوان فرۆشراوی حسابکراو و فرۆشراوی تۆ (ئەگەر دەستکاریت کردبێت)')
         ->icon('heroicon-m-scale')
         ->schema(function () use ($allCategories) {
             $diffFields = [];
