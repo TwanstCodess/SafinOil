@@ -689,7 +689,7 @@ class QuickSaleResource extends Resource
         $set('total_amount', $total);
     }
 
-   public static function table(Table $table): Table
+public static function table(Table $table): Table
 {
     return $table
         ->columns([
@@ -722,6 +722,29 @@ class QuickSaleResource extends Resource
                     'closed' => 'داخراو',
                 }),
 
+            // ستوونی کۆی لیتر (خوێندنەوەی سەرەتایی - خوێندنەوەی کۆتایی)
+            Tables\Columns\TextColumn::make('total_liters')
+                ->label('کۆی لیتر')
+                ->formatStateUsing(function ($record) {
+                    $total = 0;
+                    $readings = $record->readings ?? [];
+
+                    foreach ($readings as $categoryId => $reading) {
+                        $initial = floatval($reading['initial'] ?? 0);
+                        $final = floatval($reading['final'] ?? 0);
+                        $total += ($initial - $final);
+                    }
+
+                    return number_format($total, 0) . ' لیتر';
+                })
+                ->sortable()
+                ->weight('bold')
+                ->color('info')
+                ->alignCenter()
+                ->icon('heroicon-m-beaker')
+                ->description('سەرەتایی - کۆتایی', 'above')
+                ->extraAttributes(['class' => 'font-mono']),
+
             Tables\Columns\TextColumn::make('total_amount')
                 ->label('کۆی گشتی')
                 ->money('IQD')
@@ -741,6 +764,50 @@ class QuickSaleResource extends Resource
                 ->sortable()
                 ->toggleable(),
         ])
+
+        // زیادکردنی کۆی گشتی لیتر لە ژێرەی خشتەکە
+        ->footer(function () {
+            $totals = QuickSale::query()
+                ->when(request()->input('tableFilters.sale_date.single_date'), function ($query, $date) {
+                    return $query->whereDate('sale_date', $date);
+                }, function ($query) {
+                    return $query->whereDate('sale_date', now());
+                })
+                ->when(request()->input('tableFilters.shift.values'), function ($query, $shifts) {
+                    return $query->whereIn('shift', $shifts);
+                })
+                ->get();
+
+            $totalLiters = 0;
+            $totalAmount = 0;
+
+            foreach ($totals as $record) {
+                $totalLiters += $record->total_liters;
+                $totalAmount += $record->total_amount;
+            }
+
+            return new HtmlString('
+                <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg mt-4 border border-gray-200 dark:border-gray-700">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="bg-white dark:bg-gray-700 p-3 rounded-lg shadow-sm">
+                            <div class="text-sm text-gray-500 dark:text-gray-400">کۆی گشتی لیتر</div>
+                            <div class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">' . number_format($totalLiters) . ' لیتر</div>
+                        </div>
+
+                        <div class="bg-white dark:bg-gray-700 p-3 rounded-lg shadow-sm">
+                            <div class="text-sm text-gray-500 dark:text-gray-400">کۆی گشتی دینار</div>
+                            <div class="text-2xl font-bold text-green-600 dark:text-green-400">' . number_format($totalAmount) . ' د.ع</div>
+                        </div>
+
+                        <div class="bg-white dark:bg-gray-700 p-3 rounded-lg shadow-sm">
+                            <div class="text-sm text-gray-500 dark:text-gray-400">تێکڕای لیتر بۆ هەر شەفت</div>
+                            <div class="text-2xl font-bold text-amber-600 dark:text-amber-400">' . number_format($totalLiters / max(1, $totals->count())) . ' لیتر</div>
+                        </div>
+                    </div>
+                </div>
+            ');
+        })
+
         ->filters([
             Filter::make('sale_date')
                 ->form([
