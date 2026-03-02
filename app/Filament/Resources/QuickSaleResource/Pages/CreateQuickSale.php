@@ -18,6 +18,24 @@ class CreateQuickSale extends CreateRecord
         $data['created_by'] = Auth::id();
         $data['status'] = 'open';
 
+        // حسابکردنی total_liters و total_amount پێش تۆمارکردن
+        $totalAmount = 0;
+        $totalLiters = 0;
+        $categories = Category::all();
+
+        foreach ($categories as $category) {
+            $catId = $category->id;
+            $initial = floatval($data['initial_readings'][$catId] ?? 0);
+            $final = floatval($data['final_readings'][$catId] ?? 0);
+            $sold = $initial - $final;
+
+            $totalAmount += $sold * $category->current_price;
+            $totalLiters += $sold;
+        }
+
+        $data['total_amount'] = $totalAmount;
+        $data['total_liters'] = $totalLiters;
+
         // ئەگەر شەفتی ئێوارە بێت، خوێندنەوەی سەرەتایی لە کۆتایی شەفتی بەیانی وەردەگرێت
         if ($data['shift'] === 'evening') {
             $morningFinal = QuickSale::getMorningFinalReadings($data['sale_date']);
@@ -38,16 +56,24 @@ class CreateQuickSale extends CreateRecord
 
     protected function afterCreate(): void
     {
-        $this->record->calculateAll();
+        // حسابکردنی فرۆشراوەکان و جیاوازیەکان
+        $this->record->calculateSoldFromReadings();
+        $this->record->calculateDifferences();
 
         Notification::make()
             ->title('فرۆشی خێرا بە سەرکەوتوویی تۆمارکرا')
             ->success()
+            ->body('کۆی گشتی: ' . number_format($this->record->total_amount) . ' دینار - ' . number_format($this->record->total_liters) . ' لیتر')
             ->send();
     }
 
     protected function getRedirectUrl(): string
     {
         return $this->getResource()::getUrl('index');
+    }
+
+    protected function getCreatedNotificationTitle(): ?string
+    {
+        return null;
     }
 }
