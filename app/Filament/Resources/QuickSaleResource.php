@@ -503,7 +503,6 @@ class QuickSaleResource extends Resource
         return [
             'index' => Pages\ListQuickSales::route('/'),
             'create' => Pages\CreateQuickSale::route('/create'),
-            'edit' => Pages\CreateQuickSale::route('/{record}/edit')
         ];
     }
 }
