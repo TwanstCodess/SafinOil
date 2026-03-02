@@ -140,6 +140,18 @@ class QuickSale extends Model
     }
 
     /**
+     * وەرگرتنی خوێندنەوەی کۆتایی شەفتی بەیانی بۆ شەفتی ئێوارە
+     */
+    public static function getMorningFinalReadings($date)
+    {
+        $morningShift = self::whereDate('sale_date', $date)
+            ->where('shift', 'morning')
+            ->first();
+
+        return $morningShift ? $morningShift->final_readings : [];
+    }
+
+    /**
      * حسابکردنی فرۆشراوەکان لەسەر بنەمای خوێندنەوەکان
      */
     public function calculateSoldFromReadings()
@@ -205,25 +217,5 @@ class QuickSale extends Model
         $this->calculateDifferences();
 
         return $this;
-    }
-
-    /**
-     * کۆی گشتی ڕۆژ بۆ هەردوو شەفت
-     */
-    public static function getDailyTotal($date)
-    {
-        $morning = self::whereDate('sale_date', $date)
-            ->where('shift', 'morning')
-            ->first();
-
-        $evening = self::whereDate('sale_date', $date)
-            ->where('shift', 'evening')
-            ->first();
-
-        $total = 0;
-        $total += $morning->total_amount ?? 0;
-        $total += $evening->total_amount ?? 0;
-
-        return $total;
     }
 }
