@@ -13,6 +13,7 @@ class QuickSale extends Model
 
     protected $fillable = [
         'sale_date',
+        'shift',
         'status',
         'categories_data',
         'initial_readings',
@@ -27,6 +28,7 @@ class QuickSale extends Model
 
     protected $casts = [
         'sale_date' => 'date',
+        'shift' => 'string',
         'categories_data' => 'array',
         'initial_readings' => 'array',
         'final_readings' => 'array',
@@ -44,6 +46,30 @@ class QuickSale extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
+     * وەرگرتنی ناوی شەفت بە کوردی
+     */
+    public function getShiftNameAttribute(): string
+    {
+        return match($this->shift) {
+            'morning' => 'شەفتی بەیانی',
+            'evening' => 'شەفتی ئێوارە',
+            default => 'نادیار',
+        };
+    }
+
+    /**
+     * وەرگرتنی ڕەنگی شەفت
+     */
+    public function getShiftColorAttribute(): string
+    {
+        return match($this->shift) {
+            'morning' => 'warning',
+            'evening' => 'info',
+            default => 'gray',
+        };
     }
 
     /**
@@ -146,16 +172,28 @@ class QuickSale extends Model
     }
 
     /**
-     * کۆپی کردنی فرۆشراوەکان بۆ فرۆشراوی تۆ
+     * حسابکردنی جیاوازی لەگەڵ فرۆشراوەکانی تۆ
      */
-    public function copySoldToReported()
+    public function calculateDifferences()
     {
         $sold = $this->sold_data ?? [];
-        $this->reported_sold = $sold;
-        $this->differences = array_fill_keys(array_keys($sold), 0);
+        $reported = $this->reported_sold ?? [];
+        $differences = [];
+
+        $categories = Category::all();
+
+        foreach ($categories as $category) {
+            $catId = $category->id;
+            $soldVal = floatval($sold[$catId] ?? 0);
+            $reportedVal = floatval($reported[$catId] ?? $soldVal);
+
+            $differences[$catId] = $reportedVal - $soldVal;
+        }
+
+        $this->differences = $differences;
         $this->save();
 
-        return $this;
+        return $differences;
     }
 
     /**
@@ -164,30 +202,28 @@ class QuickSale extends Model
     public function calculateAll()
     {
         $this->calculateSoldFromReadings();
-        $this->copySoldToReported();
+        $this->calculateDifferences();
 
         return $this;
     }
 
-    public function calculateDifferences()
-{
-    $sold = $this->sold_data ?? [];
-    $reported = $this->reported_sold ?? [];
-    $differences = [];
+    /**
+     * کۆی گشتی ڕۆژ بۆ هەردوو شەفت
+     */
+    public static function getDailyTotal($date)
+    {
+        $morning = self::whereDate('sale_date', $date)
+            ->where('shift', 'morning')
+            ->first();
 
-    $categories = Category::all();
+        $evening = self::whereDate('sale_date', $date)
+            ->where('shift', 'evening')
+            ->first();
 
-    foreach ($categories as $category) {
-        $catId = $category->id;
-        $soldVal = floatval($sold[$catId] ?? 0);
-        $reportedVal = floatval($reported[$catId] ?? $soldVal); // ئەگەر reported نەبێت، وەک sold دابنێ
+        $total = 0;
+        $total += $morning->total_amount ?? 0;
+        $total += $evening->total_amount ?? 0;
 
-        $differences[$catId] = $reportedVal - $soldVal;
+        return $total;
     }
-
-    $this->differences = $differences;
-    $this->save();
-
-    return $differences;
-}
 }
