@@ -16,12 +16,6 @@ use Filament\Support\Colors\Color;
 use Filament\Support\RawJs;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Facades\Auth;
-use Filament\Tables\Filters\Filter;
-use Filament\Forms\Components\DatePicker;
-use Filament\Tables\Enums\FiltersLayout;
-use Illuminate\Database\Eloquent\Builder;
-use Filament\Tables\Filters\SelectFilter;
-use Carbon\Carbon;
 
 class QuickSaleResource extends Resource
 {
@@ -60,6 +54,7 @@ class QuickSaleResource extends Resource
                                     ->default('morning')
                                     ->reactive()
                                     ->afterStateUpdated(function ($state, callable $set, callable $get) {
+                                        // دڵنیابوون لە یونیک بوونی (sale_date + shift)
                                         $date = $get('sale_date');
                                         if ($date) {
                                             $exists = QuickSale::whereDate('sale_date', $date)
@@ -742,81 +737,36 @@ class QuickSaleResource extends Resource
                     ->toggleable(),
             ])
             ->filters([
-                // فلتەری خێرای بەروار (پێشنیاری ئەمڕۆ)
-                Filter::make('quick_date')
-                    ->label('ڕێکەوتی ئەمڕۆ')
-                    ->form([
-                        DatePicker::make('date')
-                            ->label('ڕێکەوت')
-                            ->default(now())
-                            ->displayFormat('Y/m/d')
-                            ->native(false)
-                            ->closeOnDateSelection(),
-                    ])
-                    ->baseQuery(fn (Builder $query) => $query->whereDate('sale_date', now()))
-                    ->query(function (Builder $query, array $data) {
-                        return $query
-                            ->when($data['date'], fn ($q) => $q->whereDate('sale_date', $data['date']));
-                    })
-                    ->indicateUsing(function (array $data) {
-                        if ($data['date'] ?? null) {
-                            return 'ڕێکەوت: ' . Carbon::parse($data['date'])->format('Y/m/d');
-                        }
-                        return null;
-                    })
-                    ->columnSpan(1),
-
-                // فلتەری شەفت
-                SelectFilter::make('shift')
+                Tables\Filters\SelectFilter::make('shift')
                     ->label('شەفت')
                     ->options([
                         'morning' => 'شەفتی بەیانی',
                         'evening' => 'شەفتی ئێوارە',
-                    ])
-                    ->columnSpan(1),
+                    ]),
 
-                // فلتەری ڕەوشت
-                SelectFilter::make('status')
+                Tables\Filters\SelectFilter::make('status')
                     ->label('ڕەوشت')
                     ->options([
                         'open' => 'کراوە',
                         'closed' => 'داخراو',
-                    ])
-                    ->columnSpan(1),
+                    ]),
 
-                // فلتەری پێشکەوتوو (مەودای بەروار)
-                Filter::make('date_range')
+                Tables\Filters\Filter::make('sale_date')
+                    ->label('مەودای بەروار')
                     ->form([
-                        DatePicker::make('from')
-                            ->label('لە ڕێکەوتی')
-                            ->displayFormat('Y/m/d')
-                            ->native(false),
-                        DatePicker::make('until')
-                            ->label('تا ڕێکەوتی')
-                            ->displayFormat('Y/m/d')
-                            ->native(false),
+                        \Filament\Forms\Components\DatePicker::make('from')
+                            ->label('لە ڕێکەوتی'),
+                        \Filament\Forms\Components\DatePicker::make('until')
+                            ->label('تا ڕێکەوتی'),
                     ])
-                    ->query(function (Builder $query, array $data) {
+                    ->query(function ($query, array $data) {
                         return $query
                             ->when($data['from'], fn ($q) => $q->whereDate('sale_date', '>=', $data['from']))
                             ->when($data['until'], fn ($q) => $q->whereDate('sale_date', '<=', $data['until']));
-                    })
-                    ->indicateUsing(function (array $data) {
-                        $indicators = [];
-                        if ($data['from'] ?? null) {
-                            $indicators[] = 'لە ' . Carbon::parse($data['from'])->format('Y/m/d');
-                        }
-                        if ($data['until'] ?? null) {
-                            $indicators[] = 'تا ' . Carbon::parse($data['until'])->format('Y/m/d');
-                        }
-                        return $indicators ? 'مەودای بەروار: ' . implode(' - ', $indicators) : null;
-                    })
-                    ->columns(2)
-                    ->columnSpan(2),
+                    }),
             ])
-            ->filtersLayout(FiltersLayout::AboveContentCollapsible)
+            ->filtersLayout(Tables\Enums\FiltersLayout::Modal)
             ->persistFiltersInSession()
-            ->filtersFormColumns(4)
 
             ->actions([
                 Tables\Actions\ActionGroup::make([
@@ -890,62 +840,7 @@ class QuickSaleResource extends Resource
 
             ->defaultSort('sale_date', 'desc')
             ->striped()
-            ->poll('30s')
-
-            ->defaultPaginationPageOption(10)
-
-            // کۆی گشتی لە ژێرەوەی خشتە
-            ->contentFooter(function ($records) {
-                if ($records->isEmpty()) {
-                    return null;
-                }
-
-                $totalLiter = 0;
-                $totalPrice = 0;
-                $morningTotal = 0;
-                $eveningTotal = 0;
-
-                foreach ($records as $record) {
-                    $soldData = $record->sold_data ?? [];
-                    foreach ($soldData as $catId => $liters) {
-                        $totalLiter += $liters;
-                        $category = Category::find($catId);
-                        if ($category) {
-                            $totalPrice += $liters * $category->current_price;
-                        }
-                    }
-
-                    if ($record->shift === 'morning') {
-                        $morningTotal += $record->total_amount;
-                    } else {
-                        $eveningTotal += $record->total_amount;
-                    }
-                }
-
-                return new HtmlString('
-                    <div class="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg mt-4 border border-blue-200 shadow-sm">
-                        <h3 class="text-lg font-bold text-gray-700 mb-3">📊 کۆی گشتی</h3>
-                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div class="bg-white p-3 rounded-lg text-center border border-blue-200">
-                                <span class="text-sm text-gray-600 block">کۆی گشتی فرۆشراو</span>
-                                <span class="text-2xl font-bold text-blue-600">' . number_format($totalLiter) . ' لیتر</span>
-                            </div>
-                            <div class="bg-white p-3 rounded-lg text-center border border-green-200">
-                                <span class="text-sm text-gray-600 block">کۆی گشتی (دینار)</span>
-                                <span class="text-2xl font-bold text-green-600">' . number_format($totalPrice) . ' د.ع</span>
-                            </div>
-                            <div class="bg-white p-3 rounded-lg text-center border border-yellow-200">
-                                <span class="text-sm text-gray-600 block">کۆی شەفتی بەیانی</span>
-                                <span class="text-2xl font-bold text-yellow-600">' . number_format($morningTotal) . ' د.ع</span>
-                            </div>
-                            <div class="bg-white p-3 rounded-lg text-center border border-indigo-200">
-                                <span class="text-sm text-gray-600 block">کۆی شەفتی ئێوارە</span>
-                                <span class="text-2xl font-bold text-indigo-600">' . number_format($eveningTotal) . ' د.ع</span>
-                            </div>
-                        </div>
-                    </div>
-                ');
-            });
+            ->poll('30s');
     }
 
     public static function getPages(): array
