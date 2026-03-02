@@ -300,9 +300,6 @@ class QuickSaleResource extends Resource
         return $fields;
     }
 
-<?php
-// لە بەشی Summary لە QuickSaleResource
-
 private static function getSummaryFields(): array
 {
     $fields = [];

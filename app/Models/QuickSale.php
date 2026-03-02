@@ -101,6 +101,19 @@ class QuickSale extends Model
     }
 
     /**
+     * وەرگرتنی ڕەنگی بۆ دیزاین
+     */
+    public function getTypeColor($typeKey)
+    {
+        return match($typeKey) {
+            'fuel' => 'warning',
+            'oil' => 'success',
+            'gas' => 'info',
+            default => 'gray',
+        };
+    }
+
+    /**
      * حسابکردنی فرۆشراوەکان لەسەر بنەمای خوێندنەوەکان
      */
     public function calculateSoldFromReadings()
@@ -117,11 +130,8 @@ class QuickSale extends Model
             $initialVal = floatval($initial[$catId] ?? 0);
             $finalVal = floatval($final[$catId] ?? 0);
 
-            // فرۆشراو = سەرەتایی - کۆتایی
             $soldVal = $initialVal - $finalVal;
-            $sold[$catId] = max(0, $soldVal); // نابێت نەرێنی بێت
-
-            // کۆی گشتی بە دینار
+            $sold[$catId] = $soldVal;
             $total += $soldVal * $category->current_price;
         }
 
@@ -151,7 +161,6 @@ class QuickSale extends Model
             $soldVal = floatval($sold[$catId] ?? 0);
             $reportedVal = floatval($reported[$catId] ?? 0);
 
-            // جیاوازی = فرۆشراوی ڕاپۆرتکراو - فرۆشراوی حسابکراو
             $differences[$catId] = $reportedVal - $soldVal;
         }
 
@@ -170,18 +179,5 @@ class QuickSale extends Model
         $this->calculateDifferences();
 
         return $this;
-    }
-
-    /**
-     * وەرگرتنی ڕەنگی بۆ دیزاین
-     */
-    public function getTypeColor($typeKey)
-    {
-        return match($typeKey) {
-            'fuel' => 'warning',
-            'oil' => 'success',
-            'gas' => 'info',
-            default => 'gray',
-        };
     }
 }
