@@ -168,4 +168,26 @@ class QuickSale extends Model
 
         return $this;
     }
+
+    public function calculateDifferences()
+{
+    $sold = $this->sold_data ?? [];
+    $reported = $this->reported_sold ?? [];
+    $differences = [];
+
+    $categories = Category::all();
+
+    foreach ($categories as $category) {
+        $catId = $category->id;
+        $soldVal = floatval($sold[$catId] ?? 0);
+        $reportedVal = floatval($reported[$catId] ?? $soldVal); // ئەگەر reported نەبێت، وەک sold دابنێ
+
+        $differences[$catId] = $reportedVal - $soldVal;
+    }
+
+    $this->differences = $differences;
+    $this->save();
+
+    return $differences;
+}
 }
