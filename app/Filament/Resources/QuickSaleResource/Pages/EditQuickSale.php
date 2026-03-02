@@ -8,6 +8,7 @@ use App\Models\Category;
 use Filament\Actions;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
+use Carbon\Carbon;
 
 class EditQuickSale extends EditRecord
 {
@@ -27,6 +28,11 @@ class EditQuickSale extends EditRecord
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
+        // دیاریکردنی بەروار ئەگەر دیاری نەکرابێت
+        if (!isset($data['sale_date']) || empty($data['sale_date'])) {
+            $data['sale_date'] = Carbon::now()->format('Y-m-d');
+        }
+
         // دووبارە حسابکردنی total_liters و total_amount
         $totalAmount = 0;
         $totalLiters = 0;
