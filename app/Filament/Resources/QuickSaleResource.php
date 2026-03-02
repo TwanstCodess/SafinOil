@@ -1,4 +1,5 @@
 <?php
+// app/Filament/Resources/QuickSaleResource.php
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\QuickSaleResource\Pages;
@@ -19,6 +20,9 @@ use Filament\Tables\Filters\Filter;
 use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Enums\FiltersLayout;
 use Illuminate\Database\Eloquent\Builder;
+use Filament\Tables\Filters\SelectFilter;
+use Carbon\Carbon;
+
 class QuickSaleResource extends Resource
 {
     protected static ?string $model = QuickSale::class;
@@ -152,6 +156,7 @@ class QuickSaleResource extends Resource
                     ->columnSpanFull(),
             ]);
     }
+
     private static function getInitialReadingsFields(): array
     {
         $fields = [];
@@ -737,8 +742,9 @@ class QuickSaleResource extends Resource
                     ->toggleable(),
             ])
             ->filters([
-                // فلتەری بەروار (پێشنیاری ئەمڕۆ)
-                Filter::make('sale_date')
+                // فلتەری خێرای بەروار (پێشنیاری ئەمڕۆ)
+                Filter::make('quick_date')
+                    ->label('ڕێکەوتی ئەمڕۆ')
                     ->form([
                         DatePicker::make('date')
                             ->label('ڕێکەوت')
@@ -747,20 +753,21 @@ class QuickSaleResource extends Resource
                             ->native(false)
                             ->closeOnDateSelection(),
                     ])
+                    ->baseQuery(fn (Builder $query) => $query->whereDate('sale_date', now()))
                     ->query(function (Builder $query, array $data) {
                         return $query
                             ->when($data['date'], fn ($q) => $q->whereDate('sale_date', $data['date']));
                     })
                     ->indicateUsing(function (array $data) {
                         if ($data['date'] ?? null) {
-                            return 'ڕێکەوت: ' . \Carbon\Carbon::parse($data['date'])->format('Y/m/d');
+                            return 'ڕێکەوت: ' . Carbon::parse($data['date'])->format('Y/m/d');
                         }
                         return null;
                     })
                     ->columnSpan(1),
 
                 // فلتەری شەفت
-                Tables\Filters\SelectFilter::make('shift')
+                SelectFilter::make('shift')
                     ->label('شەفت')
                     ->options([
                         'morning' => 'شەفتی بەیانی',
@@ -769,7 +776,7 @@ class QuickSaleResource extends Resource
                     ->columnSpan(1),
 
                 // فلتەری ڕەوشت
-                Tables\Filters\SelectFilter::make('status')
+                SelectFilter::make('status')
                     ->label('ڕەوشت')
                     ->options([
                         'open' => 'کراوە',
@@ -779,7 +786,6 @@ class QuickSaleResource extends Resource
 
                 // فلتەری پێشکەوتوو (مەودای بەروار)
                 Filter::make('date_range')
-                    ->label('مەودای بەروار')
                     ->form([
                         DatePicker::make('from')
                             ->label('لە ڕێکەوتی')
@@ -798,18 +804,19 @@ class QuickSaleResource extends Resource
                     ->indicateUsing(function (array $data) {
                         $indicators = [];
                         if ($data['from'] ?? null) {
-                            $indicators[] = 'لە ' . \Carbon\Carbon::parse($data['from'])->format('Y/m/d');
+                            $indicators[] = 'لە ' . Carbon::parse($data['from'])->format('Y/m/d');
                         }
                         if ($data['until'] ?? null) {
-                            $indicators[] = 'تا ' . \Carbon\Carbon::parse($data['until'])->format('Y/m/d');
+                            $indicators[] = 'تا ' . Carbon::parse($data['until'])->format('Y/m/d');
                         }
                         return $indicators ? 'مەودای بەروار: ' . implode(' - ', $indicators) : null;
                     })
                     ->columns(2)
                     ->columnSpan(2),
             ])
-            ->filtersLayout(FiltersLayout::Modal)
+            ->filtersLayout(FiltersLayout::AboveContentCollapsible)
             ->persistFiltersInSession()
+            ->filtersFormColumns(4)
 
             ->actions([
                 Tables\Actions\ActionGroup::make([
@@ -885,55 +892,60 @@ class QuickSaleResource extends Resource
             ->striped()
             ->poll('30s')
 
+            ->defaultPaginationPageOption(10)
+
             // کۆی گشتی لە ژێرەوەی خشتە
-            ->footer([
-                'total' => function ($records) {
-                    $totalLiter = 0;
-                    $totalPrice = 0;
-                    $morningTotal = 0;
-                    $eveningTotal = 0;
+            ->contentFooter(function ($records) {
+                if ($records->isEmpty()) {
+                    return null;
+                }
 
-                    foreach ($records as $record) {
-                        $soldData = $record->sold_data ?? [];
-                        foreach ($soldData as $catId => $liters) {
-                            $totalLiter += $liters;
-                            $category = Category::find($catId);
-                            if ($category) {
-                                $totalPrice += $liters * $category->current_price;
-                            }
-                        }
+                $totalLiter = 0;
+                $totalPrice = 0;
+                $morningTotal = 0;
+                $eveningTotal = 0;
 
-                        if ($record->shift === 'morning') {
-                            $morningTotal += $record->total_amount;
-                        } else {
-                            $eveningTotal += $record->total_amount;
+                foreach ($records as $record) {
+                    $soldData = $record->sold_data ?? [];
+                    foreach ($soldData as $catId => $liters) {
+                        $totalLiter += $liters;
+                        $category = Category::find($catId);
+                        if ($category) {
+                            $totalPrice += $liters * $category->current_price;
                         }
                     }
 
-                    return new HtmlString('
-                        <div class="bg-gray-50 p-4 rounded-lg mt-4 border border-gray-200">
-                            <div class="grid grid-cols-4 gap-4">
-                                <div class="bg-blue-50 p-3 rounded-lg text-center">
-                                    <span class="text-sm text-gray-600 block">کۆی گشتی فرۆشراو</span>
-                                    <span class="text-2xl font-bold text-blue-600">' . number_format($totalLiter) . ' لیتر</span>
-                                </div>
-                                <div class="bg-green-50 p-3 rounded-lg text-center">
-                                    <span class="text-sm text-gray-600 block">کۆی گشتی (دینار)</span>
-                                    <span class="text-2xl font-bold text-green-600">' . number_format($totalPrice) . ' د.ع</span>
-                                </div>
-                                <div class="bg-yellow-50 p-3 rounded-lg text-center">
-                                    <span class="text-sm text-gray-600 block">کۆی شەفتی بەیانی</span>
-                                    <span class="text-2xl font-bold text-yellow-600">' . number_format($morningTotal) . ' د.ع</span>
-                                </div>
-                                <div class="bg-indigo-50 p-3 rounded-lg text-center">
-                                    <span class="text-sm text-gray-600 block">کۆی شەفتی ئێوارە</span>
-                                    <span class="text-2xl font-bold text-indigo-600">' . number_format($eveningTotal) . ' د.ع</span>
-                                </div>
+                    if ($record->shift === 'morning') {
+                        $morningTotal += $record->total_amount;
+                    } else {
+                        $eveningTotal += $record->total_amount;
+                    }
+                }
+
+                return new HtmlString('
+                    <div class="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg mt-4 border border-blue-200 shadow-sm">
+                        <h3 class="text-lg font-bold text-gray-700 mb-3">📊 کۆی گشتی</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div class="bg-white p-3 rounded-lg text-center border border-blue-200">
+                                <span class="text-sm text-gray-600 block">کۆی گشتی فرۆشراو</span>
+                                <span class="text-2xl font-bold text-blue-600">' . number_format($totalLiter) . ' لیتر</span>
+                            </div>
+                            <div class="bg-white p-3 rounded-lg text-center border border-green-200">
+                                <span class="text-sm text-gray-600 block">کۆی گشتی (دینار)</span>
+                                <span class="text-2xl font-bold text-green-600">' . number_format($totalPrice) . ' د.ع</span>
+                            </div>
+                            <div class="bg-white p-3 rounded-lg text-center border border-yellow-200">
+                                <span class="text-sm text-gray-600 block">کۆی شەفتی بەیانی</span>
+                                <span class="text-2xl font-bold text-yellow-600">' . number_format($morningTotal) . ' د.ع</span>
+                            </div>
+                            <div class="bg-white p-3 rounded-lg text-center border border-indigo-200">
+                                <span class="text-sm text-gray-600 block">کۆی شەفتی ئێوارە</span>
+                                <span class="text-2xl font-bold text-indigo-600">' . number_format($eveningTotal) . ' د.ع</span>
                             </div>
                         </div>
-                    ');
-                },
-            ]);
+                    </div>
+                ');
+            });
     }
 
     public static function getPages(): array
