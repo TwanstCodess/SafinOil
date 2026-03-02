@@ -3,9 +3,10 @@
 namespace App\Filament\Resources\QuickSaleResource\Pages;
 
 use App\Filament\Resources\QuickSaleResource;
+use App\Models\QuickSale;
 use Filament\Actions;
-use Filament\Resources\Pages\EditRecord;
 use Filament\Notifications\Notification;
+use Filament\Resources\Pages\EditRecord;
 
 class EditQuickSale extends EditRecord
 {
