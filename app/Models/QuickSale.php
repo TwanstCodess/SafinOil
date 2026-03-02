@@ -57,11 +57,12 @@ class QuickSale extends Model
         foreach ($categories as $category) {
             $typeKey = $category->type->key ?? 'other';
             $typeName = $category->type->name ?? 'ئەوانی تر';
+            $typeColor = $category->type->color ?? 'gray';
 
             if (!isset($grouped[$typeKey])) {
                 $grouped[$typeKey] = [
                     'name' => $typeName,
-                    'color' => $category->type->color ?? 'gray',
+                    'color' => $typeColor,
                     'categories' => []
                 ];
             }
@@ -78,16 +79,35 @@ class QuickSale extends Model
     }
 
     /**
-     * حسابکردنی فرۆشراوەکان و جیاوازی
+     * وەرگرتنی هەموو کاتیگۆریەکان وەک لیست
      */
-    public function calculateAll()
+    public static function getAllCategoriesList()
+    {
+        $categories = Category::with('type')->get();
+        $list = [];
+
+        foreach ($categories as $category) {
+            $list[$category->id] = [
+                'id' => $category->id,
+                'name' => $category->name,
+                'type' => $category->type->name ?? 'نادیار',
+                'type_key' => $category->type->key ?? 'other',
+                'price' => $category->current_price,
+                'stock' => $category->stock_liters,
+            ];
+        }
+
+        return $list;
+    }
+
+    /**
+     * حسابکردنی فرۆشراوەکان لەسەر بنەمای خوێندنەوەکان
+     */
+    public function calculateSoldFromReadings()
     {
         $initial = $this->initial_readings ?? [];
         $final = $this->final_readings ?? [];
-        $reported = $this->reported_sold ?? [];
-
         $sold = [];
-        $differences = [];
         $total = 0;
 
         $categories = Category::all();
@@ -96,28 +116,72 @@ class QuickSale extends Model
             $catId = $category->id;
             $initialVal = floatval($initial[$catId] ?? 0);
             $finalVal = floatval($final[$catId] ?? 0);
-            $reportedVal = floatval($reported[$catId] ?? 0);
 
             // فرۆشراو = سەرەتایی - کۆتایی
             $soldVal = $initialVal - $finalVal;
-            $sold[$catId] = $soldVal;
-
-            // جیاوازی = فرۆشراوی ڕاپۆرتکراو - فرۆشراوی حسابکراو
-            $differences[$catId] = $reportedVal - $soldVal;
+            $sold[$catId] = max(0, $soldVal); // نابێت نەرێنی بێت
 
             // کۆی گشتی بە دینار
             $total += $soldVal * $category->current_price;
         }
 
         $this->sold_data = $sold;
-        $this->differences = $differences;
         $this->total_amount = $total;
         $this->save();
 
         return [
             'sold' => $sold,
-            'differences' => $differences,
             'total' => $total,
         ];
+    }
+
+    /**
+     * حسابکردنی جیاوازی لەگەڵ فرۆشراوەکانی تۆ
+     */
+    public function calculateDifferences()
+    {
+        $sold = $this->sold_data ?? [];
+        $reported = $this->reported_sold ?? [];
+        $differences = [];
+
+        $categories = Category::all();
+
+        foreach ($categories as $category) {
+            $catId = $category->id;
+            $soldVal = floatval($sold[$catId] ?? 0);
+            $reportedVal = floatval($reported[$catId] ?? 0);
+
+            // جیاوازی = فرۆشراوی ڕاپۆرتکراو - فرۆشراوی حسابکراو
+            $differences[$catId] = $reportedVal - $soldVal;
+        }
+
+        $this->differences = $differences;
+        $this->save();
+
+        return $differences;
+    }
+
+    /**
+     * هەموو حسابەکان یەکجار
+     */
+    public function calculateAll()
+    {
+        $this->calculateSoldFromReadings();
+        $this->calculateDifferences();
+
+        return $this;
+    }
+
+    /**
+     * وەرگرتنی ڕەنگی بۆ دیزاین
+     */
+    public function getTypeColor($typeKey)
+    {
+        return match($typeKey) {
+            'fuel' => 'warning',
+            'oil' => 'success',
+            'gas' => 'info',
+            default => 'gray',
+        };
     }
 }
