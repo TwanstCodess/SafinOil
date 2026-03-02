@@ -146,28 +146,16 @@ class QuickSale extends Model
     }
 
     /**
-     * حسابکردنی جیاوازی لەگەڵ فرۆشراوەکانی تۆ
+     * کۆپی کردنی فرۆشراوەکان بۆ فرۆشراوی تۆ
      */
-    public function calculateDifferences()
+    public function copySoldToReported()
     {
         $sold = $this->sold_data ?? [];
-        $reported = $this->reported_sold ?? [];
-        $differences = [];
-
-        $categories = Category::all();
-
-        foreach ($categories as $category) {
-            $catId = $category->id;
-            $soldVal = floatval($sold[$catId] ?? 0);
-            $reportedVal = floatval($reported[$catId] ?? 0);
-
-            $differences[$catId] = $reportedVal - $soldVal;
-        }
-
-        $this->differences = $differences;
+        $this->reported_sold = $sold;
+        $this->differences = array_fill_keys(array_keys($sold), 0);
         $this->save();
 
-        return $differences;
+        return $this;
     }
 
     /**
@@ -176,7 +164,7 @@ class QuickSale extends Model
     public function calculateAll()
     {
         $this->calculateSoldFromReadings();
-        $this->calculateDifferences();
+        $this->copySoldToReported();
 
         return $this;
     }
