@@ -19,7 +19,6 @@ use Filament\Tables\Filters\Filter;
 use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Enums\FiltersLayout;
 use Illuminate\Database\Eloquent\Builder;
-use Filament\Tables\footer;
 class QuickSaleResource extends Resource
 {
     protected static ?string $model = QuickSale::class;
