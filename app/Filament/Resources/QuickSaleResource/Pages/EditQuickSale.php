@@ -23,7 +23,12 @@ class EditQuickSale extends EditRecord
 
     protected function afterSave(): void
     {
-        $this->record->calculateAll();
+        // دوای هەر نوێکردنەوەیەک، فرۆشراوەکان حساب بکە
+        $this->record->calculateSoldFromReadings();
+
+        // reported_sold ناگۆڕدرێت مەگەر بە شێوەی دەستی
+        // تەنها differences حساب بکە
+        $this->record->calculateDifferences();
 
         Notification::make()
             ->title('فرۆشی خێرا بە سەرکەوتوویی نوێ کرایەوە')
