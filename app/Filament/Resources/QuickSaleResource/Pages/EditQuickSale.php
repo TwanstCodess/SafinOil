@@ -23,12 +23,27 @@ class EditQuickSale extends EditRecord
 
     protected function afterSave(): void
     {
-        // دوای هەر نوێکردنەوەیەک، فرۆشراوەکان حساب بکە
         $this->record->calculateSoldFromReadings();
-
-        // reported_sold ناگۆڕدرێت مەگەر بە شێوەی دەستی
-        // تەنها differences حساب بکە
         $this->record->calculateDifferences();
+
+        // ئەگەر ئەم شەفتە بەیانی بێت و داخرابێت، شەفتی ئێوارەی هەمان ڕۆژ دەستکاری بکە
+        if ($this->record->shift === 'morning' && $this->record->status === 'closed') {
+            $eveningShift = QuickSale::whereDate('sale_date', $this->record->sale_date)
+                ->where('shift', 'evening')
+                ->first();
+
+            if ($eveningShift && $eveningShift->status === 'open') {
+                $eveningShift->update([
+                    'initial_readings' => $this->record->final_readings
+                ]);
+
+                Notification::make()
+                    ->info()
+                    ->title('شەفتی ئێوارە نوێ کرایەوە')
+                    ->body('خوێندنەوەی سەرەتایی شەفتی ئێوارە نوێ کرایەوە')
+                    ->send();
+            }
+        }
 
         Notification::make()
             ->title('فرۆشی خێرا بە سەرکەوتوویی نوێ کرایەوە')
