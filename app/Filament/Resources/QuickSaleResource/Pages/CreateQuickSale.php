@@ -7,6 +7,7 @@ use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Support\Facades\Auth;
 use App\Models\QuickSale;
 use App\Models\Category;
+use Filament\Notifications\Notification;
 
 class CreateQuickSale extends CreateRecord
 {
@@ -17,12 +18,18 @@ class CreateQuickSale extends CreateRecord
         $data['created_by'] = Auth::id();
         $data['status'] = 'open';
 
-        // پڕکردنەوەی reported_sold بە دیفۆڵت (دوای create، calculateAll جێبەجێ دەبێت)
-        if (!isset($data['reported_sold'])) {
-            $data['reported_sold'] = [];
-            $categories = Category::all();
-            foreach ($categories as $category) {
-                $data['reported_sold'][$category->id] = 0;
+        // ئەگەر شەفتی ئێوارە بێت، خوێندنەوەی سەرەتایی لە کۆتایی شەفتی بەیانی وەردەگرێت
+        if ($data['shift'] === 'evening') {
+            $morningFinal = QuickSale::getMorningFinalReadings($data['sale_date']);
+
+            if (!empty($morningFinal)) {
+                $data['initial_readings'] = $morningFinal;
+
+                Notification::make()
+                    ->info()
+                    ->title('خوێندنەوەی سەرەتایی')
+                    ->body('خوێندنەوەی سەرەتایی لە کۆتایی شەفتی بەیانی وەرگیرا')
+                    ->send();
             }
         }
 
@@ -31,10 +38,9 @@ class CreateQuickSale extends CreateRecord
 
     protected function afterCreate(): void
     {
-        // حسابکردن و کۆپی کردنی فرۆشراوەکان بۆ reported_sold
         $this->record->calculateAll();
 
-        \Filament\Notifications\Notification::make()
+        Notification::make()
             ->title('فرۆشی خێرا بە سەرکەوتوویی تۆمارکرا')
             ->success()
             ->send();
