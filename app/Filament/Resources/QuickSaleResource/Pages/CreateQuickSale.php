@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\QuickSale;
 use App\Models\Category;
 use Filament\Notifications\Notification;
+use Carbon\Carbon;
 
 class CreateQuickSale extends CreateRecord
 {
@@ -17,6 +18,11 @@ class CreateQuickSale extends CreateRecord
     {
         $data['created_by'] = Auth::id();
         $data['status'] = 'open';
+
+        // دیاریکردنی بەرواری ئەمڕۆ وەک دیفۆڵت
+        if (!isset($data['sale_date']) || empty($data['sale_date'])) {
+            $data['sale_date'] = Carbon::now()->format('Y-m-d');
+        }
 
         // حسابکردنی total_liters و total_amount پێش تۆمارکردن
         $totalAmount = 0;
@@ -42,6 +48,21 @@ class CreateQuickSale extends CreateRecord
 
             if (!empty($morningFinal)) {
                 $data['initial_readings'] = $morningFinal;
+
+                // دووبارە حسابکردنی total_liters و total_amount دوای وەرگرتنی خوێندنەوەکان
+                $totalAmount = 0;
+                $totalLiters = 0;
+                foreach ($categories as $category) {
+                    $catId = $category->id;
+                    $initial = floatval($data['initial_readings'][$catId] ?? 0);
+                    $final = floatval($data['final_readings'][$catId] ?? 0);
+                    $sold = $initial - $final;
+
+                    $totalAmount += $sold * $category->current_price;
+                    $totalLiters += $sold;
+                }
+                $data['total_amount'] = $totalAmount;
+                $data['total_liters'] = $totalLiters;
 
                 Notification::make()
                     ->info()
@@ -75,5 +96,12 @@ class CreateQuickSale extends CreateRecord
     protected function getCreatedNotificationTitle(): ?string
     {
         return null;
+    }
+
+    protected function mutateFormDataBeforeFill(array $data): array
+    {
+        // بەرواری ئەمڕۆ وەک دیفۆڵت
+        $data['sale_date'] = Carbon::now()->format('Y-m-d');
+        return $data;
     }
 }
