@@ -52,12 +52,15 @@ class QuickSaleResource extends Resource
                                         'closed' => 'داخراو',
                                     ])
                                     ->default('open')
-                                    ->disabled()
+                                    ->disabled(fn (string $operation): bool => $operation === 'create')
                                     ->dehydrated(true),
                             ]),
 
                         Forms\Components\Hidden::make('created_by')
                             ->default(fn () => Auth::id()),
+
+                        Forms\Components\Hidden::make('categories_data')
+                            ->default(fn () => QuickSale::getCategoriesGroupedByType()),
                     ]),
 
                 Forms\Components\Tabs::make('فرۆشی خێرا')
@@ -66,7 +69,11 @@ class QuickSaleResource extends Resource
                             ->icon('heroicon-m-sun')
                             ->schema([
                                 Forms\Components\Placeholder::make('initial_info')
-                                    ->content('بڕی کۆگا لە سەرەتای ڕۆژدا داخیل بکە')
+                                    ->content(new HtmlString('
+                                        <div class="bg-blue-50 p-4 rounded-lg">
+                                            <p class="text-blue-700">📊 بڕی کۆگا لە <strong>سەرەتای ڕۆژ</strong>دا داخیل بکە</p>
+                                        </div>
+                                    '))
                                     ->columnSpanFull(),
                                 ...self::getInitialReadingsFields(),
                             ]),
@@ -75,7 +82,11 @@ class QuickSaleResource extends Resource
                             ->icon('heroicon-m-moon')
                             ->schema([
                                 Forms\Components\Placeholder::make('final_info')
-                                    ->content('بڕی کۆگا لە کۆتایی ڕۆژدا داخیل بکە')
+                                    ->content(new HtmlString('
+                                        <div class="bg-indigo-50 p-4 rounded-lg">
+                                            <p class="text-indigo-700">🌙 بڕی کۆگا لە <strong>کۆتایی ڕۆژ</strong>دا داخیل بکە</p>
+                                        </div>
+                                    '))
                                     ->columnSpanFull(),
                                 ...self::getFinalReadingsFields(),
                             ]),
@@ -84,7 +95,11 @@ class QuickSaleResource extends Resource
                             ->icon('heroicon-m-document-text')
                             ->schema([
                                 Forms\Components\Placeholder::make('reported_info')
-                                    ->content('ئەو بڕانە بنووسە کە خۆت فرۆشتوویت')
+                                    ->content(new HtmlString('
+                                        <div class="bg-purple-50 p-4 rounded-lg">
+                                            <p class="text-purple-700">📝 ئەو بڕانە بنووسە کە <strong>خۆت فرۆشتوویت</strong></p>
+                                        </div>
+                                    '))
                                     ->columnSpanFull(),
                                 ...self::getReportedSoldFields(),
                             ]),
@@ -93,7 +108,11 @@ class QuickSaleResource extends Resource
                             ->icon('heroicon-m-chart-bar')
                             ->schema([
                                 Forms\Components\Placeholder::make('summary_info')
-                                    ->content('پوختەی فرۆشراوەکان و جیاوازیەکان')
+                                    ->content(new HtmlString('
+                                        <div class="bg-green-50 p-4 rounded-lg">
+                                            <p class="text-green-700">📊 پوختەی فرۆشراوەکان و جیاوازیەکان</p>
+                                        </div>
+                                    '))
                                     ->columnSpanFull(),
                                 ...self::getSummaryFields(),
                             ]),
@@ -106,23 +125,43 @@ class QuickSaleResource extends Resource
     private static function getInitialReadingsFields(): array
     {
         $fields = [];
-        $groupedCategories = QuickSale::getCategoriesGroupedByType();
+        $allCategories = QuickSale::getAllCategoriesList();
 
-        foreach ($groupedCategories as $typeKey => $typeData) {
-            $color = $typeData['color'] ?? 'gray';
+        // کۆمەڵکردنی کاتیگۆریەکان بەپێی جۆر
+        $grouped = [];
+        foreach ($allCategories as $catId => $category) {
+            $typeKey = $category['type_key'];
+            if (!isset($grouped[$typeKey])) {
+                $grouped[$typeKey] = [
+                    'name' => $category['type'],
+                    'items' => []
+                ];
+            }
+            $grouped[$typeKey]['items'][$catId] = $category;
+        }
 
-            $fields[] = Forms\Components\Section::make($typeData['name'])
-                ->description("خوێندنەوەی سەرەتایی بۆ {$typeData['name']}")
+        foreach ($grouped as $typeKey => $group) {
+            $color = match($typeKey) {
+                'fuel' => 'warning',
+                'oil' => 'success',
+                'gas' => 'info',
+                default => 'gray',
+            };
+
+            $fields[] = Forms\Components\Section::make($group['name'])
+                ->description("خوێندنەوەی سەرەتایی")
                 ->icon('heroicon-m-arrow-up-circle')
                 ->collapsible()
-                ->schema(function () use ($typeData, $color) {
+                ->schema(function () use ($group, $color) {
                     $catFields = [];
-                    foreach ($typeData['categories'] as $catId => $category) {
+                    foreach ($group['items'] as $catId => $category) {
                         $catFields[] = Forms\Components\TextInput::make("initial_readings.{$catId}")
-                            ->label(new HtmlString(
-                                "<span class='font-bold'>{$category['name']}</span>" .
-                                "<br><span class='text-xs text-gray-500'>نرخ: " . number_format($category['price']) . " د.ع</span>"
-                            ))
+                            ->label(new HtmlString("
+                                <div class='flex flex-col'>
+                                    <span class='font-bold'>{$category['name']}</span>
+                                    <span class='text-xs text-gray-500'>نرخ: " . number_format($category['price']) . " د.ع</span>
+                                </div>
+                            "))
                             ->numeric()
                             ->default(0)
                             ->suffix('لیتر')
@@ -146,23 +185,42 @@ class QuickSaleResource extends Resource
     private static function getFinalReadingsFields(): array
     {
         $fields = [];
-        $groupedCategories = QuickSale::getCategoriesGroupedByType();
+        $allCategories = QuickSale::getAllCategoriesList();
 
-        foreach ($groupedCategories as $typeKey => $typeData) {
-            $color = $typeData['color'] ?? 'gray';
+        $grouped = [];
+        foreach ($allCategories as $catId => $category) {
+            $typeKey = $category['type_key'];
+            if (!isset($grouped[$typeKey])) {
+                $grouped[$typeKey] = [
+                    'name' => $category['type'],
+                    'items' => []
+                ];
+            }
+            $grouped[$typeKey]['items'][$catId] = $category;
+        }
 
-            $fields[] = Forms\Components\Section::make($typeData['name'])
-                ->description("خوێندنەوەی کۆتایی بۆ {$typeData['name']}")
+        foreach ($grouped as $typeKey => $group) {
+            $color = match($typeKey) {
+                'fuel' => 'warning',
+                'oil' => 'success',
+                'gas' => 'info',
+                default => 'gray',
+            };
+
+            $fields[] = Forms\Components\Section::make($group['name'])
+                ->description("خوێندنەوەی کۆتایی")
                 ->icon('heroicon-m-arrow-down-circle')
                 ->collapsible()
-                ->schema(function () use ($typeData, $color) {
+                ->schema(function () use ($group, $color) {
                     $catFields = [];
-                    foreach ($typeData['categories'] as $catId => $category) {
+                    foreach ($group['items'] as $catId => $category) {
                         $catFields[] = Forms\Components\TextInput::make("final_readings.{$catId}")
-                            ->label(new HtmlString(
-                                "<span class='font-bold'>{$category['name']}</span>" .
-                                "<br><span class='text-xs text-gray-500'>نرخ: " . number_format($category['price']) . " د.ع</span>"
-                            ))
+                            ->label(new HtmlString("
+                                <div class='flex flex-col'>
+                                    <span class='font-bold'>{$category['name']}</span>
+                                    <span class='text-xs text-gray-500'>نرخ: " . number_format($category['price']) . " د.ع</span>
+                                </div>
+                            "))
                             ->numeric()
                             ->default(0)
                             ->suffix('لیتر')
@@ -186,23 +244,42 @@ class QuickSaleResource extends Resource
     private static function getReportedSoldFields(): array
     {
         $fields = [];
-        $groupedCategories = QuickSale::getCategoriesGroupedByType();
+        $allCategories = QuickSale::getAllCategoriesList();
 
-        foreach ($groupedCategories as $typeKey => $typeData) {
-            $color = $typeData['color'] ?? 'gray';
+        $grouped = [];
+        foreach ($allCategories as $catId => $category) {
+            $typeKey = $category['type_key'];
+            if (!isset($grouped[$typeKey])) {
+                $grouped[$typeKey] = [
+                    'name' => $category['type'],
+                    'items' => []
+                ];
+            }
+            $grouped[$typeKey]['items'][$catId] = $category;
+        }
 
-            $fields[] = Forms\Components\Section::make($typeData['name'])
-                ->description("فرۆشراوەکانی تۆ بۆ {$typeData['name']}")
+        foreach ($grouped as $typeKey => $group) {
+            $color = match($typeKey) {
+                'fuel' => 'warning',
+                'oil' => 'success',
+                'gas' => 'info',
+                default => 'gray',
+            };
+
+            $fields[] = Forms\Components\Section::make($group['name'])
+                ->description("فرۆشراوەکانی تۆ")
                 ->icon('heroicon-m-document-check')
                 ->collapsible()
-                ->schema(function () use ($typeData, $color) {
+                ->schema(function () use ($group, $color) {
                     $catFields = [];
-                    foreach ($typeData['categories'] as $catId => $category) {
+                    foreach ($group['items'] as $catId => $category) {
                         $catFields[] = Forms\Components\TextInput::make("reported_sold.{$catId}")
-                            ->label(new HtmlString(
-                                "<span class='font-bold'>{$category['name']}</span>" .
-                                "<br><span class='text-xs text-gray-500'>نرخ: " . number_format($category['price']) . " د.ع</span>"
-                            ))
+                            ->label(new HtmlString("
+                                <div class='flex flex-col'>
+                                    <span class='font-bold'>{$category['name']}</span>
+                                    <span class='text-xs text-gray-500'>نرخ: " . number_format($category['price']) . " د.ع</span>
+                                </div>
+                            "))
                             ->numeric()
                             ->default(0)
                             ->suffix('لیتر')
@@ -226,65 +303,68 @@ class QuickSaleResource extends Resource
     private static function getSummaryFields(): array
     {
         $fields = [];
-        $groupedCategories = QuickSale::getCategoriesGroupedByType();
+        $allCategories = QuickSale::getAllCategoriesList();
 
-        foreach ($groupedCategories as $typeKey => $typeData) {
-            $color = $typeData['color'] ?? 'gray';
+        foreach ($allCategories as $catId => $category) {
+            $typeKey = $category['type_key'];
+            $color = match($typeKey) {
+                'fuel' => 'warning',
+                'oil' => 'success',
+                'gas' => 'info',
+                default => 'gray',
+            };
 
-            $fields[] = Forms\Components\Section::make($typeData['name'])
-                ->description("پوختە و جیاوازی بۆ {$typeData['name']}")
-                ->icon('heroicon-m-scale')
-                ->schema(function () use ($typeData, $color) {
-                    $catFields = [];
-                    foreach ($typeData['categories'] as $catId => $category) {
-                        $catFields[] = Forms\Components\Grid::make(3)
-                            ->schema([
-                                Forms\Components\Placeholder::make("sold_display.{$catId}")
-                                    ->label('فرۆشراو (حسابکراو)')
-                                    ->content(function (callable $get) use ($catId) {
-                                        $initial = floatval($get("initial_readings.{$catId}") ?? 0);
-                                        $final = floatval($get("final_readings.{$catId}") ?? 0);
-                                        $sold = $initial - $final;
+            $fields[] = Forms\Components\Grid::make(4)
+                ->schema([
+                    Forms\Components\Placeholder::make("cat_name.{$catId}")
+                        ->label('کاتیگۆری')
+                        ->content($category['name'])
+                        ->extraAttributes(['class' => 'font-bold']),
 
-                                        return new HtmlString(
-                                            "<span class='text-primary-600 font-bold text-lg'>" .
-                                            number_format($sold) . " لیتر</span>"
-                                        );
-                                    }),
+                    Forms\Components\Placeholder::make("sold_display.{$catId}")
+                        ->label('فرۆشراو')
+                        ->content(function (callable $get) use ($catId) {
+                            $initial = floatval($get("initial_readings.{$catId}") ?? 0);
+                            $final = floatval($get("final_readings.{$catId}") ?? 0);
+                            $sold = $initial - $final;
 
-                                Forms\Components\Placeholder::make("reported_display.{$catId}")
-                                    ->label('فرۆشراوی تۆ')
-                                    ->content(function (callable $get) use ($catId) {
-                                        $reported = floatval($get("reported_sold.{$catId}") ?? 0);
+                            return new HtmlString(
+                                "<span class='text-primary-600 font-bold'>" .
+                                number_format($sold) . " لیتر</span>"
+                            );
+                        }),
 
-                                        return new HtmlString(
-                                            "<span class='text-info-600 font-bold text-lg'>" .
-                                            number_format($reported) . " لیتر</span>"
-                                        );
-                                    }),
+                    Forms\Components\Placeholder::make("reported_display.{$catId}")
+                        ->label('فرۆشراوی تۆ')
+                        ->content(function (callable $get) use ($catId) {
+                            $reported = floatval($get("reported_sold.{$catId}") ?? 0);
 
-                                Forms\Components\Placeholder::make("difference_display.{$catId}")
-                                    ->label('جیاوازی')
-                                    ->content(function (callable $get) use ($catId, $color) {
-                                        $initial = floatval($get("initial_readings.{$catId}") ?? 0);
-                                        $final = floatval($get("final_readings.{$catId}") ?? 0);
-                                        $reported = floatval($get("reported_sold.{$catId}") ?? 0);
-                                        $calculated = $initial - $final;
-                                        $difference = $reported - $calculated;
+                            return new HtmlString(
+                                "<span class='text-info-600 font-bold'>" .
+                                number_format($reported) . " لیتر</span>"
+                            );
+                        }),
 
-                                        $diffColor = $difference == 0 ? 'gray' : ($difference > 0 ? 'success' : 'danger');
-                                        $icon = $difference == 0 ? '✓' : ($difference > 0 ? '↑' : '↓');
+                    Forms\Components\Placeholder::make("difference_display.{$catId}")
+                        ->label('جیاوازی')
+                        ->content(function (callable $get) use ($catId) {
+                            $initial = floatval($get("initial_readings.{$catId}") ?? 0);
+                            $final = floatval($get("final_readings.{$catId}") ?? 0);
+                            $reported = floatval($get("reported_sold.{$catId}") ?? 0);
+                            $calculated = $initial - $final;
+                            $difference = $reported - $calculated;
 
-                                        return new HtmlString(
-                                            "<span class='text-{$diffColor}-600 font-bold text-lg'>" .
-                                            $icon . ' ' . number_format(abs($difference)) . " لیتر</span>"
-                                        );
-                                    }),
-                            ]);
-                    }
-                    return $catFields;
-                })
-                ->columns(1);
+                            $diffColor = $difference == 0 ? 'gray' : ($difference > 0 ? 'success' : 'danger');
+                            $icon = $difference == 0 ? '✓' : ($difference > 0 ? '↑' : '↓');
+
+                            return new HtmlString(
+                                "<span class='text-{$diffColor}-600 font-bold'>" .
+                                $icon . ' ' . number_format(abs($difference)) . " لیتر</span>"
+                            );
+                        }),
+                ])
+                ->columns(4)
+                ->extraAttributes(['class' => 'border-b border-gray-200 py-2']);
         }
 
         // کۆی گشتی
@@ -294,7 +374,7 @@ class QuickSaleResource extends Resource
                 Forms\Components\Grid::make(2)
                     ->schema([
                         Forms\Components\Placeholder::make('total_sold')
-                            ->label('کۆی گشتی فرۆشراو (لیتر)')
+                            ->label('کۆی گشتی فرۆشراو')
                             ->content(function (callable $get) {
                                 $total = 0;
                                 $categories = Category::all();
@@ -311,7 +391,7 @@ class QuickSaleResource extends Resource
                                 );
                             }),
 
-                        Forms\Components\Placeholder::make('total_amount')
+                        Forms\Components\Placeholder::make('total_amount_display')
                             ->label('کۆی گشتی (دینار)')
                             ->content(function (callable $get) {
                                 $total = 0;
@@ -334,15 +414,12 @@ class QuickSaleResource extends Resource
             ->columnSpanFull();
 
         $fields[] = Forms\Components\Hidden::make('total_amount');
-        $fields[] = Forms\Components\Hidden::make('categories_data')
-            ->default(fn () => QuickSale::getCategoriesGroupedByType());
 
         return $fields;
     }
 
     private static function updateCalculations(callable $set, callable $get)
     {
-        // نوێکردنەوەی total_amount
         $total = 0;
         $categories = Category::all();
 
@@ -435,6 +512,11 @@ class QuickSaleResource extends Resource
                         ->icon('heroicon-m-eye')
                         ->color('info'),
 
+                    Tables\Actions\EditAction::make()
+                        ->label('دەستکاری')
+                        ->icon('heroicon-m-pencil')
+                        ->color('warning'),
+
                     Action::make('close')
                         ->label('داخستنی ڕۆژ')
                         ->icon('heroicon-m-lock-closed')
@@ -503,6 +585,8 @@ class QuickSaleResource extends Resource
         return [
             'index' => Pages\ListQuickSales::route('/'),
             'create' => Pages\CreateQuickSale::route('/create'),
+            'edit' => Pages\EditQuickSale::route('/{record}/edit'),
+            'view' => Pages\ViewQuickSale::route('/{record}'),
         ];
     }
 }
