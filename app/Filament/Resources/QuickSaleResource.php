@@ -1099,3 +1099,4 @@ class QuickSaleResource extends Resource
         ];
     }
 }
+//
