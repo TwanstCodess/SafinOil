@@ -4,6 +4,7 @@ namespace App\Filament\Resources\QuickSaleResource\Pages;
 
 use App\Filament\Resources\QuickSaleResource;
 use App\Models\QuickSale;
+use App\Models\Category;
 use Filament\Actions;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
@@ -16,14 +17,40 @@ class EditQuickSale extends EditRecord
     {
         return [
             Actions\ViewAction::make()
-                ->label('بینین'),
+                ->label('بینین')
+                ->icon('heroicon-m-eye'),
             Actions\DeleteAction::make()
-                ->label('سڕینەوە'),
+                ->label('سڕینەوە')
+                ->icon('heroicon-m-trash'),
         ];
+    }
+
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        // دووبارە حسابکردنی total_liters و total_amount
+        $totalAmount = 0;
+        $totalLiters = 0;
+        $categories = Category::all();
+
+        foreach ($categories as $category) {
+            $catId = $category->id;
+            $initial = floatval($data['initial_readings'][$catId] ?? 0);
+            $final = floatval($data['final_readings'][$catId] ?? 0);
+            $sold = $initial - $final;
+
+            $totalAmount += $sold * $category->current_price;
+            $totalLiters += $sold;
+        }
+
+        $data['total_amount'] = $totalAmount;
+        $data['total_liters'] = $totalLiters;
+
+        return $data;
     }
 
     protected function afterSave(): void
     {
+        // دووبارە حسابکردنی هەموو شتەکان
         $this->record->calculateSoldFromReadings();
         $this->record->calculateDifferences();
 
@@ -38,6 +65,10 @@ class EditQuickSale extends EditRecord
                     'initial_readings' => $this->record->final_readings
                 ]);
 
+                // دووبارە حسابکردنی شەفتی ئێوارە
+                $eveningShift->calculateSoldFromReadings();
+                $eveningShift->calculateDifferences();
+
                 Notification::make()
                     ->info()
                     ->title('شەفتی ئێوارە نوێ کرایەوە')
@@ -49,11 +80,17 @@ class EditQuickSale extends EditRecord
         Notification::make()
             ->title('فرۆشی خێرا بە سەرکەوتوویی نوێ کرایەوە')
             ->success()
+            ->body('کۆی گشتی: ' . number_format($this->record->total_amount) . ' دینار - ' . number_format($this->record->total_liters) . ' لیتر')
             ->send();
     }
 
     protected function getRedirectUrl(): string
     {
         return $this->getResource()::getUrl('index');
+    }
+
+    protected function getSavedNotificationTitle(): ?string
+    {
+        return null;
     }
 }
