@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use App\Models\Category;
 use App\Models\User;
+use Carbon\Carbon;
 
 class QuickSale extends Model
 {
@@ -22,7 +23,7 @@ class QuickSale extends Model
         'reported_sold',
         'differences',
         'total_amount',
-        'total_liters', // زیادکردنی total_liters
+        'total_liters',
         'closed_by',
         'created_by'
     ];
@@ -37,7 +38,7 @@ class QuickSale extends Model
         'reported_sold' => 'array',
         'differences' => 'array',
         'total_amount' => 'decimal:2',
-        'total_liters' => 'decimal:2', // زیادکردنی total_liters
+        'total_liters' => 'decimal:2',
     ];
 
     public function closer(): BelongsTo
@@ -180,7 +181,7 @@ class QuickSale extends Model
         $this->sold_data = $sold;
         $this->total_amount = $totalAmount;
         $this->total_liters = $totalLiters;
-        $this->save();
+        $this->saveQuietly();
 
         return [
             'sold' => $sold,
@@ -209,7 +210,7 @@ class QuickSale extends Model
         }
 
         $this->differences = $differences;
-        $this->save();
+        $this->saveQuietly();
 
         return $differences;
     }
@@ -235,16 +236,13 @@ class QuickSale extends Model
         }
 
         $total = 0;
-        $readings = $this->readings ?? [];
         $sold = $this->sold_data ?? [];
 
-        // ئەگەر sold_data هەیە، لەوێوە حساب بکە
         if (!empty($sold)) {
             foreach ($sold as $liters) {
                 $total += floatval($liters);
             }
         }
-        // ئەگەرنا لەسەر بنەمای خوێندنەوەکان حساب بکە
         elseif (!empty($this->initial_readings) && !empty($this->final_readings)) {
             foreach ($this->initial_readings as $catId => $initial) {
                 $final = floatval($this->final_readings[$catId] ?? 0);
@@ -260,7 +258,7 @@ class QuickSale extends Model
      */
     public static function getTotalsByDate($date = null)
     {
-        $date = $date ?? now()->format('Y-m-d');
+        $date = $date ?? Carbon::now()->format('Y-m-d');
 
         $query = self::whereDate('sale_date', $date);
 
@@ -284,6 +282,48 @@ class QuickSale extends Model
             $totals[$shift]['count']++;
             $totals[$shift]['total_liters'] += $sale->total_liters ?? 0;
             $totals[$shift]['total_amount'] += $sale->total_amount ?? 0;
+        }
+
+        return $totals;
+    }
+
+    /**
+     * وەرگرتنی کۆی گشتی بۆ ماوەی دیاریکراو
+     */
+    public static function getTotalsForDateRange($fromDate, $toDate)
+    {
+        $query = self::whereDate('sale_date', '>=', $fromDate)
+                     ->whereDate('sale_date', '<=', $toDate);
+
+        $totals = [
+            'morning' => [
+                'count' => 0,
+                'total_liters' => 0,
+                'total_amount' => 0,
+            ],
+            'evening' => [
+                'count' => 0,
+                'total_liters' => 0,
+                'total_amount' => 0,
+            ],
+            'total' => [
+                'count' => 0,
+                'total_liters' => 0,
+                'total_amount' => 0,
+            ],
+        ];
+
+        $sales = $query->get();
+
+        foreach ($sales as $sale) {
+            $shift = $sale->shift;
+            $totals[$shift]['count']++;
+            $totals[$shift]['total_liters'] += $sale->total_liters ?? 0;
+            $totals[$shift]['total_amount'] += $sale->total_amount ?? 0;
+
+            $totals['total']['count']++;
+            $totals['total']['total_liters'] += $sale->total_liters ?? 0;
+            $totals['total']['total_amount'] += $sale->total_amount ?? 0;
         }
 
         return $totals;
