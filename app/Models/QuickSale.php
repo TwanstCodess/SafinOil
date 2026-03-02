@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Models\Category;
+use App\Models\User;
 
 class QuickSale extends Model
 {
@@ -16,6 +18,7 @@ class QuickSale extends Model
         'initial_readings',
         'final_readings',
         'sold_data',
+        'reported_sold',
         'differences',
         'total_amount',
         'closed_by',
@@ -28,6 +31,7 @@ class QuickSale extends Model
         'initial_readings' => 'array',
         'final_readings' => 'array',
         'sold_data' => 'array',
+        'reported_sold' => 'array',
         'differences' => 'array',
         'total_amount' => 'decimal:2',
     ];
@@ -43,66 +47,66 @@ class QuickSale extends Model
     }
 
     /**
-     * وەرگرتنی هەموو کاتیگۆریەکان
+     * وەرگرتنی هەموو کاتیگۆریەکان بە پێی جۆر
      */
-    public static function getAllCategories()
+    public static function getCategoriesGroupedByType()
     {
-        return Category::with('type')->get()->map(function ($category) {
-            return [
-                'id' => $category->id,
-                'name' => $category->name,
-                'type' => $category->type->name ?? 'نادیار',
-                'type_key' => $category->type->key ?? 'unknown',
-                'current_price' => $category->current_price,
-                'stock' => $category->stock_liters,
-            ];
-        });
-    }
-
-    /**
-     * پێکهاتنی ستراکچەری کاتیگۆریەکان
-     */
-    public static function getCategoriesStructure()
-    {
-        $categories = self::getAllCategories();
-        $structure = [];
+        $categories = Category::with('type')->get();
+        $grouped = [];
 
         foreach ($categories as $category) {
-            $structure[$category['type_key']][$category['id']] = [
-                'name' => $category['name'],
-                'price' => $category['current_price'],
-                'initial' => 0,
-                'final' => 0,
-                'sold' => 0,
-                'difference' => 0,
+            $typeKey = $category->type->key ?? 'other';
+            $typeName = $category->type->name ?? 'ئەوانی تر';
+
+            if (!isset($grouped[$typeKey])) {
+                $grouped[$typeKey] = [
+                    'name' => $typeName,
+                    'color' => $category->type->color ?? 'gray',
+                    'categories' => []
+                ];
+            }
+
+            $grouped[$typeKey]['categories'][$category->id] = [
+                'id' => $category->id,
+                'name' => $category->name,
+                'price' => $category->current_price,
+                'stock' => $category->stock_liters,
             ];
         }
 
-        return $structure;
+        return $grouped;
     }
 
     /**
      * حسابکردنی فرۆشراوەکان و جیاوازی
      */
-    public function calculateSold()
+    public function calculateAll()
     {
         $initial = $this->initial_readings ?? [];
         $final = $this->final_readings ?? [];
+        $reported = $this->reported_sold ?? [];
+
         $sold = [];
         $differences = [];
         $total = 0;
 
-        foreach ($this->categories_data ?? [] as $typeKey => $typeCategories) {
-            foreach ($typeCategories as $catId => $catData) {
-                $initialVal = $initial[$catId] ?? 0;
-                $finalVal = $final[$catId] ?? 0;
-                $soldVal = $initialVal - $finalVal;
+        $categories = Category::all();
 
-                $sold[$catId] = $soldVal;
-                $differences[$catId] = $soldVal - ($catData['sold'] ?? 0);
+        foreach ($categories as $category) {
+            $catId = $category->id;
+            $initialVal = floatval($initial[$catId] ?? 0);
+            $finalVal = floatval($final[$catId] ?? 0);
+            $reportedVal = floatval($reported[$catId] ?? 0);
 
-                $total += $soldVal * ($catData['price'] ?? 0);
-            }
+            // فرۆشراو = سەرەتایی - کۆتایی
+            $soldVal = $initialVal - $finalVal;
+            $sold[$catId] = $soldVal;
+
+            // جیاوازی = فرۆشراوی ڕاپۆرتکراو - فرۆشراوی حسابکراو
+            $differences[$catId] = $reportedVal - $soldVal;
+
+            // کۆی گشتی بە دینار
+            $total += $soldVal * $category->current_price;
         }
 
         $this->sold_data = $sold;
@@ -115,5 +119,18 @@ class QuickSale extends Model
             'differences' => $differences,
             'total' => $total,
         ];
+    }
+
+    /**
+     * وەرگرتنی ڕەنگی بۆ دیزاین
+     */
+    public function getTypeColor($typeKey)
+    {
+        return match($typeKey) {
+            'fuel' => 'warning',
+            'oil' => 'success',
+            'gas' => 'info',
+            default => 'gray',
+        };
     }
 }
