@@ -16,6 +16,10 @@ use Filament\Support\Colors\Color;
 use Filament\Support\RawJs;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Facades\Auth;
+use Filament\Tables\Filters\Filter;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TernaryFilter;
+use Illuminate\Database\Eloquent\Builder;
 
 class QuickSaleResource extends Resource
 {
@@ -723,7 +727,8 @@ class QuickSaleResource extends Resource
                     ->money('IQD')
                     ->sortable()
                     ->weight('bold')
-                    ->color('success'),
+                    ->color('success')
+                    ->description(fn ($record): string => number_format($record->total_liters, 0) . ' لیتر', 'above'),
 
                 Tables\Columns\TextColumn::make('creator.name')
                     ->label('تۆمارکراو لەلایەن')
@@ -737,36 +742,232 @@ class QuickSaleResource extends Resource
                     ->toggleable(),
             ])
             ->filters([
-                Tables\Filters\SelectFilter::make('shift')
+                Filter::make('sale_date')
+                    ->form([
+                        Forms\Components\DatePicker::make('single_date')
+                            ->label('بەروار')
+                            ->default(now())
+                            ->displayFormat('Y/m/d')
+                            ->native(false)
+                            ->closeOnDateSelection()
+                            ->columnSpan(1),
+                    ])
+                    ->columns(1)
+                    ->columnSpan(1)
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when(
+                                $data['single_date'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('sale_date', $date),
+                                fn (Builder $query): Builder => $query->whereDate('sale_date', now())
+                            );
+                    })
+                    ->baseQuery(fn (Builder $query) => $query)
+                    ->indicateUsing(function (array $data): ?string {
+                        if (!$data['single_date']) {
+                            $data['single_date'] = now()->format('Y-m-d');
+                        }
+
+                        return 'بەروار: ' . \Carbon\Carbon::parse($data['single_date'])->format('Y/m/d');
+                    }),
+
+                Filter::make('date_range')
+                    ->form([
+                        Forms\Components\Grid::make(2)
+                            ->schema([
+                                Forms\Components\DatePicker::make('from_date')
+                                    ->label('لە بەرواری')
+                                    ->displayFormat('Y/m/d')
+                                    ->native(false)
+                                    ->closeOnDateSelection(),
+
+                                Forms\Components\DatePicker::make('to_date')
+                                    ->label('تا بەرواری')
+                                    ->displayFormat('Y/m/d')
+                                    ->native(false)
+                                    ->closeOnDateSelection()
+                                    ->after('from_date'),
+                            ]),
+                    ])
+                    ->columns(1)
+                    ->columnSpan(2)
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when(
+                                $data['from_date'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('sale_date', '>=', $date),
+                            )
+                            ->when(
+                                $data['to_date'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('sale_date', '<=', $date),
+                            );
+                    })
+                    ->indicateUsing(function (array $data): ?string {
+                        $indicators = [];
+
+                        if ($data['from_date'] ?? null) {
+                            $indicators[] = 'لە ' . \Carbon\Carbon::parse($data['from_date'])->format('Y/m/d');
+                        }
+
+                        if ($data['to_date'] ?? null) {
+                            $indicators[] = 'تا ' . \Carbon\Carbon::parse($data['to_date'])->format('Y/m/d');
+                        }
+
+                        return $indicators ? implode(' ، ', $indicators) : null;
+                    }),
+
+                SelectFilter::make('shift')
                     ->label('شەفت')
                     ->options([
-                        'morning' => 'شەفتی بەیانی',
-                        'evening' => 'شەفتی ئێوارە',
-                    ]),
+                        'morning' => '🌅 شەفتی بەیانی',
+                        'evening' => '🌙 شەفتی ئێوارە',
+                    ])
+                    ->multiple()
+                    ->searchable(),
 
-                Tables\Filters\SelectFilter::make('status')
+                SelectFilter::make('status')
                     ->label('ڕەوشت')
                     ->options([
                         'open' => 'کراوە',
                         'closed' => 'داخراو',
-                    ]),
-
-                Tables\Filters\Filter::make('sale_date')
-                    ->label('مەودای بەروار')
-                    ->form([
-                        \Filament\Forms\Components\DatePicker::make('from')
-                            ->label('لە ڕێکەوتی'),
-                        \Filament\Forms\Components\DatePicker::make('until')
-                            ->label('تا ڕێکەوتی'),
                     ])
-                    ->query(function ($query, array $data) {
+                    ->multiple()
+                    ->searchable(),
+
+                Filter::make('created_at')
+                    ->form([
+                        Forms\Components\DatePicker::make('created_from')
+                            ->label('تۆمارکراو لە بەرواری')
+                            ->displayFormat('Y/m/d')
+                            ->native(false)
+                            ->closeOnDateSelection(),
+
+                        Forms\Components\DatePicker::make('created_until')
+                            ->label('تۆمارکراو تا بەرواری')
+                            ->displayFormat('Y/m/d')
+                            ->native(false)
+                            ->closeOnDateSelection(),
+                    ])
+                    ->columns(2)
+                    ->columnSpan(2)
+                    ->query(function (Builder $query, array $data): Builder {
                         return $query
-                            ->when($data['from'], fn ($q) => $q->whereDate('sale_date', '>=', $data['from']))
-                            ->when($data['until'], fn ($q) => $q->whereDate('sale_date', '<=', $data['until']));
+                            ->when(
+                                $data['created_from'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('created_at', '>=', $date),
+                            )
+                            ->when(
+                                $data['created_until'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('created_at', '<=', $date),
+                            );
                     }),
             ])
-            ->filtersLayout(Tables\Enums\FiltersLayout::Modal)
+            ->filtersFormColumns(2)
+            ->filtersLayout(Tables\Enums\FiltersLayout::AboveContentCollapsible)
             ->persistFiltersInSession()
+            ->deferFilters()
+            ->filtersFormMaxHeight('500px')
+
+            ->header(function () {
+                $totals = QuickSale::getTotalsByDate();
+
+                if (!$totals) {
+                    return null;
+                }
+
+                return new HtmlString('
+                    <div class="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 mb-4 border border-blue-200 shadow-sm">
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="flex items-center gap-2">
+                                <span class="bg-blue-600 text-white p-2 rounded-lg">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                                    </svg>
+                                </span>
+                                <h3 class="text-lg font-bold text-gray-800">پوختەی گشتی فرۆشتن</h3>
+                            </div>
+                            <span class="text-sm text-gray-500">' . now()->format('Y/m/d') . '</span>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <!-- کۆی گشتی بەیانی -->
+                            <div class="bg-yellow-50 rounded-lg p-4 border border-yellow-200 hover:shadow-md transition-shadow">
+                                <div class="flex items-center justify-between mb-2">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-2xl">🌅</span>
+                                        <span class="font-bold text-yellow-700">شەفتی بەیانی</span>
+                                    </div>
+                                    <span class="bg-yellow-200 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                                        ' . $totals['morning']['count'] . ' شەفت
+                                    </span>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 mt-3">
+                                    <div class="bg-white bg-opacity-50 rounded p-2">
+                                        <span class="text-xs text-gray-500 block">کۆی فرۆشراو</span>
+                                        <span class="text-yellow-700 font-bold text-sm">' . number_format($totals['morning']['total_liters']) . ' لیتر</span>
+                                    </div>
+                                    <div class="bg-white bg-opacity-50 rounded p-2">
+                                        <span class="text-xs text-gray-500 block">کۆی دینار</span>
+                                        <span class="text-yellow-700 font-bold text-sm">' . number_format($totals['morning']['total_amount']) . ' د.ع</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- کۆی گشتی ئێوارە -->
+                            <div class="bg-indigo-50 rounded-lg p-4 border border-indigo-200 hover:shadow-md transition-shadow">
+                                <div class="flex items-center justify-between mb-2">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-2xl">🌙</span>
+                                        <span class="font-bold text-indigo-700">شەفتی ئێوارە</span>
+                                    </div>
+                                    <span class="bg-indigo-200 text-indigo-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                                        ' . $totals['evening']['count'] . ' شەفت
+                                    </span>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 mt-3">
+                                    <div class="bg-white bg-opacity-50 rounded p-2">
+                                        <span class="text-xs text-gray-500 block">کۆی فرۆشراو</span>
+                                        <span class="text-indigo-700 font-bold text-sm">' . number_format($totals['evening']['total_liters']) . ' لیتر</span>
+                                    </div>
+                                    <div class="bg-white bg-opacity-50 rounded p-2">
+                                        <span class="text-xs text-gray-500 block">کۆی دینار</span>
+                                        <span class="text-indigo-700 font-bold text-sm">' . number_format($totals['evening']['total_amount']) . ' د.ع</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- کۆی گشتی هەردوو شەفت -->
+                            <div class="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg p-4 border border-green-200 hover:shadow-md transition-shadow">
+                                <div class="flex items-center justify-between mb-2">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-2xl">📊</span>
+                                        <span class="font-bold text-green-700">کۆی گشتی</span>
+                                    </div>
+                                    <span class="bg-green-200 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                                        ' . ($totals['morning']['count'] + $totals['evening']['count']) . ' شەفت
+                                    </span>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 mt-3">
+                                    <div class="bg-white bg-opacity-50 rounded p-2">
+                                        <span class="text-xs text-gray-500 block">کۆی گشتی لیتر</span>
+                                        <span class="text-green-700 font-bold text-sm">' . number_format($totals['morning']['total_liters'] + $totals['evening']['total_liters']) . ' لیتر</span>
+                                    </div>
+                                    <div class="bg-white bg-opacity-50 rounded p-2">
+                                        <span class="text-xs text-gray-500 block">کۆی گشتی دینار</span>
+                                        <span class="text-green-700 font-bold text-sm">' . number_format($totals['morning']['total_amount'] + $totals['evening']['total_amount']) . ' د.ع</span>
+                                    </div>
+                                </div>
+                                <div class="mt-2 pt-2 border-t border-green-200">
+                                    <div class="flex justify-between text-xs">
+                                        <span class="text-gray-600">تێکڕای فرۆشراو:</span>
+                                        <span class="font-bold text-green-700">' . number_format(($totals['morning']['total_liters'] + $totals['evening']['total_liters']) / max(1, ($totals['morning']['count'] + $totals['evening']['count']))) . ' لیتر/شەفت</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ');
+            })
 
             ->actions([
                 Tables\Actions\ActionGroup::make([
