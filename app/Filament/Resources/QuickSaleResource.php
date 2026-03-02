@@ -98,6 +98,7 @@ class QuickSaleResource extends Resource
                                     ->content(new HtmlString('
                                         <div class="bg-purple-50 p-4 rounded-lg">
                                             <p class="text-purple-700">📝 ئەو بڕانە بنووسە کە <strong>خۆت فرۆشتوویت</strong></p>
+                                            <p class="text-purple-600 text-sm mt-2">تکایە دوای داخڵکردنی خوێندنەوەکان، لەم بەشەدا بڕەکانی خۆت بنووسە</p>
                                         </div>
                                     '))
                                     ->columnSpanFull(),
@@ -267,7 +268,7 @@ class QuickSaleResource extends Resource
             };
 
             $fields[] = Forms\Components\Section::make($group['name'])
-                ->description("فرۆشراوەکانی تۆ")
+                ->description("فرۆشراوەکانی تۆ (بە لیتر)")
                 ->icon('heroicon-m-document-check')
                 ->collapsible()
                 ->schema(function () use ($group, $color) {
@@ -281,7 +282,12 @@ class QuickSaleResource extends Resource
                                 </div>
                             "))
                             ->numeric()
-                            ->default(0)
+                            ->default(function (callable $get) use ($catId) {
+                                // دیفۆڵت وەک فرۆشراوی حسابکراو
+                                $initial = floatval($get("initial_readings.{$catId}") ?? 0);
+                                $final = floatval($get("final_readings.{$catId}") ?? 0);
+                                return $initial - $final;
+                            })
                             ->suffix('لیتر')
                             ->mask(RawJs::make('$money($input)'))
                             ->reactive()
@@ -300,351 +306,350 @@ class QuickSaleResource extends Resource
         return $fields;
     }
 
-// app/Filament/Resources/QuickSaleResource.php (بەشی Summary)
+    private static function getSummaryFields(): array
+    {
+        $fields = [];
+        $allCategories = QuickSale::getAllCategoriesList();
 
-private static function getSummaryFields(): array
-{
-    $fields = [];
-    $allCategories = QuickSale::getAllCategoriesList();
+        // دوگمەی کۆپی کردن
+        $fields[] = Forms\Components\Actions::make([
+            Forms\Components\Actions\Action::make('copyToReported')
+                ->label('کۆپی کردنی فرۆشراوەکان بۆ فرۆشراوی تۆ')
+                ->icon('heroicon-m-document-duplicate')
+                ->color('success')
+                ->action(function (callable $set, callable $get) use ($allCategories) {
+                    foreach ($allCategories as $catId => $category) {
+                        $initial = floatval($get("initial_readings.{$catId}") ?? 0);
+                        $final = floatval($get("final_readings.{$catId}") ?? 0);
+                        $sold = $initial - $final;
+                        $set("reported_sold.{$catId}", $sold);
+                    }
 
-    // دوگمەی کۆپی کردن
-    $fields[] = Forms\Components\Actions::make([
-        Forms\Components\Actions\Action::make('copyToReported')
-            ->label('کۆپی کردنی فرۆشراوەکان بۆ فرۆشراوی تۆ')
-            ->icon('heroicon-m-document-duplicate')
-            ->color('success')
-            ->action(function (callable $set, callable $get) use ($allCategories) {
-                foreach ($allCategories as $catId => $category) {
-                    $initial = floatval($get("initial_readings.{$catId}") ?? 0);
-                    $final = floatval($get("final_readings.{$catId}") ?? 0);
-                    $sold = $initial - $final;
-                    $set("reported_sold.{$catId}", $sold);
-                }
+                    self::updateCalculations($set, $get);
 
-                // دوای کۆپی کردن، total_amount دووبارە حساب بکە
-                self::updateCalculations($set, $get);
-
-                \Filament\Notifications\Notification::make()
-                    ->title('فرۆشراوەکان بە سەرکەوتوویی کۆپی کران')
-                    ->success()
-                    ->send();
-            })
-            ->extraAttributes(['class' => 'mb-4']),
-    ])
-    ->columnSpanFull();
-
-    // سەرەتا ناونیشانی ستوونەکان
-    $fields[] = Forms\Components\Grid::make(5)
-        ->schema([
-            Forms\Components\Placeholder::make('header_category')
-                ->label('')
-                ->content(new HtmlString('<span class="font-bold text-gray-700">کاتیگۆری</span>')),
-
-            Forms\Components\Placeholder::make('header_initial')
-                ->label('')
-                ->content(new HtmlString('<span class="font-bold text-gray-700">سەرەتایی</span>')),
-
-            Forms\Components\Placeholder::make('header_final')
-                ->label('')
-                ->content(new HtmlString('<span class="font-bold text-gray-700">کۆتایی</span>')),
-
-            Forms\Components\Placeholder::make('header_sold')
-                ->label('')
-                ->content(new HtmlString('<span class="font-bold text-gray-700">فرۆشراو</span>')),
-
-            Forms\Components\Placeholder::make('header_reported')
-                ->label('')
-                ->content(new HtmlString('<span class="font-bold text-gray-700">فرۆشراوی تۆ</span>')),
+                    Notification::make()
+                        ->title('فرۆشراوەکان بە سەرکەوتوویی کۆپی کران')
+                        ->success()
+                        ->send();
+                })
+                ->extraAttributes(['class' => 'mb-4']),
         ])
-        ->columns(5)
-        ->extraAttributes(['class' => 'bg-gray-100 p-2 rounded-t-lg mb-2']);
-
-    // بۆ هەر کاتیگۆرییەک
-    foreach ($allCategories as $catId => $category) {
-        $typeKey = $category['type_key'];
-        $bgColor = match($typeKey) {
-            'fuel' => 'bg-warning-50',
-            'oil' => 'bg-success-50',
-            'gas' => 'bg-info-50',
-            default => 'bg-gray-50',
-        };
-
-        $fields[] = Forms\Components\Grid::make(5)
-            ->schema([
-                // ناوی کاتیگۆری
-                Forms\Components\Placeholder::make("cat_name.{$catId}")
-                    ->label('')
-                    ->content(new HtmlString(
-                        "<div class='flex flex-col'>
-                            <span class='font-bold'>{$category['name']}</span>
-                            <span class='text-xs text-gray-500'>" . number_format($category['price']) . " د.ع</span>
-                        </div>"
-                    )),
-
-                // خوێندنەوەی سەرەتایی
-                Forms\Components\Placeholder::make("initial_display.{$catId}")
-                    ->label('')
-                    ->content(function (callable $get) use ($catId) {
-                        $initial = floatval($get("initial_readings.{$catId}") ?? 0);
-                        return new HtmlString(
-                            "<span class='text-blue-600 font-medium'>" . number_format($initial) . " لیتر</span>"
-                        );
-                    }),
-
-                // خوێندنەوەی کۆتایی
-                Forms\Components\Placeholder::make("final_display.{$catId}")
-                    ->label('')
-                    ->content(function (callable $get) use ($catId) {
-                        $final = floatval($get("final_readings.{$catId}") ?? 0);
-                        return new HtmlString(
-                            "<span class='text-purple-600 font-medium'>" . number_format($final) . " لیتر</span>"
-                        );
-                    }),
-
-                // فرۆشراو (حسابکراو)
-                Forms\Components\Placeholder::make("sold_display.{$catId}")
-                    ->label('')
-                    ->content(function (callable $get) use ($catId, $category) {
-                        $initial = floatval($get("initial_readings.{$catId}") ?? 0);
-                        $final = floatval($get("final_readings.{$catId}") ?? 0);
-                        $sold = $initial - $final;
-                        $totalPrice = $sold * $category['price'];
-
-                        $color = $sold > 0 ? 'text-success-600' : 'text-gray-400';
-
-                        return new HtmlString(
-                            "<div class='flex flex-col'>
-                                <span class='{$color} font-bold'>" . number_format($sold) . " لیتر</span>
-                                <span class='text-xs text-gray-500'>" . number_format($totalPrice) . " د.ع</span>
-                            </div>"
-                        );
-                    }),
-
-                // فرۆشراوی تۆ (ئێستا وەک فرۆشراو ڕێک دەخرێت)
-                Forms\Components\Placeholder::make("reported_display.{$catId}")
-                    ->label('')
-                    ->content(function (callable $get) use ($catId, $category) {
-                        $initial = floatval($get("initial_readings.{$catId}") ?? 0);
-                        $final = floatval($get("final_readings.{$catId}") ?? 0);
-                        $sold = $initial - $final;
-                        $reported = floatval($get("reported_sold.{$catId}") ?? $sold); // دیفۆڵت وەک فرۆشراو
-                        $totalPrice = $reported * $category['price'];
-
-                        return new HtmlString(
-                            "<div class='flex flex-col'>
-                                <span class='text-info-600 font-bold'>" . number_format($reported) . " لیتر</span>
-                                <span class='text-xs text-gray-500'>" . number_format($totalPrice) . " د.ع</span>
-                            </div>"
-                        );
-                    }),
-            ])
-            ->columns(5)
-            ->extraAttributes(['class' => "{$bgColor} p-3 rounded-lg mb-2 border border-gray-200"]);
-    }
-
-    // جیاوازیەکان
-    $fields[] = Forms\Components\Section::make('جیاوازیەکان')
-        ->description('جیاوازی نێوان فرۆشراوی حسابکراو و فرۆشراوی تۆ (ئەگەر دەستکاریت کردبێت)')
-        ->icon('heroicon-m-scale')
-        ->schema(function () use ($allCategories) {
-            $diffFields = [];
-
-            foreach ($allCategories as $catId => $category) {
-                $typeKey = $category['type_key'];
-                $color = match($typeKey) {
-                    'fuel' => 'warning',
-                    'oil' => 'success',
-                    'gas' => 'info',
-                    default => 'gray',
-                };
-
-                $diffFields[] = Forms\Components\Grid::make(3)
-                    ->schema([
-                        Forms\Components\Placeholder::make("diff_cat.{$catId}")
-                            ->label('')
-                            ->content($category['name']),
-
-                        Forms\Components\Placeholder::make("diff_value.{$catId}")
-                            ->label('')
-                            ->content(function (callable $get) use ($catId) {
-                                $initial = floatval($get("initial_readings.{$catId}") ?? 0);
-                                $final = floatval($get("final_readings.{$catId}") ?? 0);
-                                $reported = floatval($get("reported_sold.{$catId}") ?? 0);
-                                $calculated = $initial - $final;
-                                $difference = $reported - $calculated;
-
-                                $diffColor = $difference == 0 ? 'gray' : ($difference > 0 ? 'success' : 'danger');
-                                $icon = $difference == 0 ? '✓' : ($difference > 0 ? '↑' : '↓');
-                                $status = $difference == 0 ? 'یەکسان' : ($difference > 0 ? 'زیادە' : 'کەم');
-
-                                return new HtmlString(
-                                    "<div class='flex items-center gap-2'>
-                                        <span class='text-{$diffColor}-600 font-bold text-lg'>{$icon}</span>
-                                        <div class='flex flex-col'>
-                                            <span class='text-{$diffColor}-600 font-bold'>"
-                                            . number_format(abs($difference)) . " لیتر</span>
-                                            <span class='text-xs text-gray-500'>{$status}</span>
-                                        </div>
-                                    </div>"
-                                );
-                            }),
-
-                        Forms\Components\Placeholder::make("diff_price.{$catId}")
-                            ->label('')
-                            ->content(function (callable $get) use ($catId, $category) {
-                                $initial = floatval($get("initial_readings.{$catId}") ?? 0);
-                                $final = floatval($get("final_readings.{$catId}") ?? 0);
-                                $reported = floatval($get("reported_sold.{$catId}") ?? 0);
-                                $calculated = $initial - $final;
-                                $difference = $reported - $calculated;
-                                $priceDiff = $difference * $category['price'];
-
-                                $diffColor = $priceDiff == 0 ? 'gray' : ($priceDiff > 0 ? 'success' : 'danger');
-
-                                return new HtmlString(
-                                    "<span class='text-{$diffColor}-600 font-bold'>"
-                                    . number_format(abs($priceDiff)) . " د.ع</span>"
-                                );
-                            }),
-                    ])
-                    ->columns(3)
-                    ->extraAttributes(['class' => 'border-b border-gray-200 py-2']);
-            }
-
-            return $diffFields;
-        })
         ->columnSpanFull();
 
-    // کۆی گشتی
-    $fields[] = Forms\Components\Section::make('کۆی گشتی')
-        ->icon('heroicon-m-calculator')
-        ->schema([
-            Forms\Components\Grid::make(4)
+        // سەرەتا ناونیشانی ستوونەکان
+        $fields[] = Forms\Components\Grid::make(7)
+            ->schema([
+                Forms\Components\Placeholder::make('header_category')
+                    ->label('')
+                    ->content(new HtmlString('<span class="font-bold text-gray-700">کاتیگۆری</span>')),
+
+                Forms\Components\Placeholder::make('header_initial')
+                    ->label('')
+                    ->content(new HtmlString('<span class="font-bold text-gray-700">سەرەتایی</span>')),
+
+                Forms\Components\Placeholder::make('header_final')
+                    ->label('')
+                    ->content(new HtmlString('<span class="font-bold text-gray-700">کۆتایی</span>')),
+
+                Forms\Components\Placeholder::make('header_sold')
+                    ->label('')
+                    ->content(new HtmlString('<span class="font-bold text-gray-700">فرۆشراو</span>')),
+
+                Forms\Components\Placeholder::make('header_reported')
+                    ->label('')
+                    ->content(new HtmlString('<span class="font-bold text-gray-700">فرۆشراوی تۆ</span>')),
+
+                Forms\Components\Placeholder::make('header_diff_liter')
+                    ->label('')
+                    ->content(new HtmlString('<span class="font-bold text-gray-700">جیاوازی (لیتر)</span>')),
+
+                Forms\Components\Placeholder::make('header_diff_price')
+                    ->label('')
+                    ->content(new HtmlString('<span class="font-bold text-gray-700">جیاوازی (دینار)</span>')),
+            ])
+            ->columns(7)
+            ->extraAttributes(['class' => 'bg-gray-100 p-2 rounded-t-lg mb-2']);
+
+        // بۆ هەر کاتیگۆرییەک
+        foreach ($allCategories as $catId => $category) {
+            $typeKey = $category['type_key'];
+            $bgColor = match($typeKey) {
+                'fuel' => 'bg-warning-50',
+                'oil' => 'bg-success-50',
+                'gas' => 'bg-info-50',
+                default => 'bg-gray-50',
+            };
+
+            $fields[] = Forms\Components\Grid::make(7)
                 ->schema([
-                    Forms\Components\Placeholder::make('total_initial')
-                        ->label('کۆی سەرەتایی')
-                        ->content(function (callable $get) {
-                            $total = 0;
-                            $categories = Category::all();
+                    // ناوی کاتیگۆری
+                    Forms\Components\Placeholder::make("cat_name.{$catId}")
+                        ->label('')
+                        ->content(new HtmlString(
+                            "<div class='flex flex-col'>
+                                <span class='font-bold'>{$category['name']}</span>
+                                <span class='text-xs text-gray-500'>" . number_format($category['price']) . " د.ع</span>
+                            </div>"
+                        )),
 
-                            foreach ($categories as $category) {
-                                $total += floatval($get("initial_readings.{$category->id}") ?? 0);
-                            }
-
+                    // خوێندنەوەی سەرەتایی
+                    Forms\Components\Placeholder::make("initial_display.{$catId}")
+                        ->label('')
+                        ->content(function (callable $get) use ($catId) {
+                            $initial = floatval($get("initial_readings.{$catId}") ?? 0);
                             return new HtmlString(
-                                "<span class='text-blue-600 font-bold text-xl'>" .
-                                number_format($total) . " لیتر</span>"
+                                "<span class='text-blue-600 font-medium'>" . number_format($initial) . " لیتر</span>"
                             );
                         }),
 
-                    Forms\Components\Placeholder::make('total_final')
-                        ->label('کۆی کۆتایی')
-                        ->content(function (callable $get) {
-                            $total = 0;
-                            $categories = Category::all();
-
-                            foreach ($categories as $category) {
-                                $total += floatval($get("final_readings.{$category->id}") ?? 0);
-                            }
-
+                    // خوێندنەوەی کۆتایی
+                    Forms\Components\Placeholder::make("final_display.{$catId}")
+                        ->label('')
+                        ->content(function (callable $get) use ($catId) {
+                            $final = floatval($get("final_readings.{$catId}") ?? 0);
                             return new HtmlString(
-                                "<span class='text-purple-600 font-bold text-xl'>" .
-                                number_format($total) . " لیتر</span>"
+                                "<span class='text-purple-600 font-medium'>" . number_format($final) . " لیتر</span>"
                             );
                         }),
 
-                    Forms\Components\Placeholder::make('total_sold')
-                        ->label('کۆی فرۆشراو')
-                        ->content(function (callable $get) {
-                            $total = 0;
-                            $categories = Category::all();
+                    // فرۆشراو (حسابکراو)
+                    Forms\Components\Placeholder::make("sold_display.{$catId}")
+                        ->label('')
+                        ->content(function (callable $get) use ($catId, $category) {
+                            $initial = floatval($get("initial_readings.{$catId}") ?? 0);
+                            $final = floatval($get("final_readings.{$catId}") ?? 0);
+                            $sold = $initial - $final;
+                            $totalPrice = $sold * $category['price'];
 
-                            foreach ($categories as $category) {
-                                $initial = floatval($get("initial_readings.{$category->id}") ?? 0);
-                                $final = floatval($get("final_readings.{$category->id}") ?? 0);
-                                $total += ($initial - $final);
-                            }
-
-                            return new HtmlString(
-                                "<span class='text-success-600 font-bold text-xl'>" .
-                                number_format($total) . " لیتر</span>"
-                            );
-                        }),
-
-                    Forms\Components\Placeholder::make('total_reported')
-                        ->label('کۆی فرۆشراوی تۆ')
-                        ->content(function (callable $get) {
-                            $total = 0;
-                            $categories = Category::all();
-
-                            foreach ($categories as $category) {
-                                $total += floatval($get("reported_sold.{$category->id}") ?? 0);
-                            }
+                            $color = $sold > 0 ? 'text-success-600' : 'text-gray-400';
 
                             return new HtmlString(
-                                "<span class='text-info-600 font-bold text-xl'>" .
-                                number_format($total) . " لیتر</span>"
-                            );
-                        }),
-                ])
-                ->columns(4),
-
-            Forms\Components\Grid::make(2)
-                ->schema([
-                    Forms\Components\Placeholder::make('total_difference')
-                        ->label('کۆی جیاوازی (لیتر)')
-                        ->content(function (callable $get) {
-                            $totalDiff = 0;
-                            $categories = Category::all();
-
-                            foreach ($categories as $category) {
-                                $catId = $category->id;
-                                $initial = floatval($get("initial_readings.{$catId}") ?? 0);
-                                $final = floatval($get("final_readings.{$catId}") ?? 0);
-                                $reported = floatval($get("reported_sold.{$catId}") ?? 0);
-                                $calculated = $initial - $final;
-                                $totalDiff += ($reported - $calculated);
-                            }
-
-                            $diffColor = $totalDiff == 0 ? 'gray' : ($totalDiff > 0 ? 'success' : 'danger');
-                            $icon = $totalDiff == 0 ? '✓' : ($totalDiff > 0 ? '↑' : '↓');
-
-                            return new HtmlString(
-                                "<div class='flex items-center gap-2'>
-                                    <span class='text-{$diffColor}-600 font-bold text-2xl'>{$icon}</span>
-                                    <span class='text-{$diffColor}-600 font-bold text-2xl'>"
-                                    . number_format(abs($totalDiff)) . " لیتر</span>
+                                "<div class='flex flex-col'>
+                                    <span class='{$color} font-bold'>" . number_format($sold) . " لیتر</span>
+                                    <span class='text-xs text-gray-500'>" . number_format($totalPrice) . " د.ع</span>
                                 </div>"
                             );
                         }),
 
-                    Forms\Components\Placeholder::make('total_amount_display')
-                        ->label('کۆی گشتی (دینار)')
-                        ->content(function (callable $get) {
-                            $total = 0;
-                            $categories = Category::all();
-
-                            foreach ($categories as $category) {
-                                $initial = floatval($get("initial_readings.{$category->id}") ?? 0);
-                                $final = floatval($get("final_readings.{$category->id}") ?? 0);
-                                $sold = $initial - $final;
-                                $total += $sold * $category->current_price;
-                            }
+                    // فرۆشراوی تۆ
+                    Forms\Components\Placeholder::make("reported_display.{$catId}")
+                        ->label('')
+                        ->content(function (callable $get) use ($catId, $category) {
+                            $initial = floatval($get("initial_readings.{$catId}") ?? 0);
+                            $final = floatval($get("final_readings.{$catId}") ?? 0);
+                            $sold = $initial - $final;
+                            $reported = floatval($get("reported_sold.{$catId}") ?? $sold);
+                            $totalPrice = $reported * $category['price'];
 
                             return new HtmlString(
-                                "<span class='text-success-600 font-bold text-2xl'>" .
-                                number_format($total) . " دینار</span>"
+                                "<div class='flex flex-col'>
+                                    <span class='text-info-600 font-bold'>" . number_format($reported) . " لیتر</span>
+                                    <span class='text-xs text-gray-500'>" . number_format($totalPrice) . " د.ع</span>
+                                </div>"
+                            );
+                        }),
+
+                    // جیاوازی (لیتر)
+                    Forms\Components\Placeholder::make("diff_liter.{$catId}")
+                        ->label('')
+                        ->content(function (callable $get) use ($catId) {
+                            $initial = floatval($get("initial_readings.{$catId}") ?? 0);
+                            $final = floatval($get("final_readings.{$catId}") ?? 0);
+                            $reported = floatval($get("reported_sold.{$catId}") ?? 0);
+                            $calculated = $initial - $final;
+                            $difference = $reported - $calculated;
+
+                            $diffColor = $difference == 0 ? 'gray' : ($difference > 0 ? 'success' : 'danger');
+                            $icon = $difference == 0 ? '✓' : ($difference > 0 ? '↑' : '↓');
+
+                            return new HtmlString(
+                                "<div class='flex items-center gap-1'>
+                                    <span class='text-{$diffColor}-600 font-bold'>{$icon}</span>
+                                    <span class='text-{$diffColor}-600 font-bold'>"
+                                    . number_format(abs($difference)) . " لیتر</span>
+                                </div>"
+                            );
+                        }),
+
+                    // جیاوازی (دینار)
+                    Forms\Components\Placeholder::make("diff_price.{$catId}")
+                        ->label('')
+                        ->content(function (callable $get) use ($catId, $category) {
+                            $initial = floatval($get("initial_readings.{$catId}") ?? 0);
+                            $final = floatval($get("final_readings.{$catId}") ?? 0);
+                            $reported = floatval($get("reported_sold.{$catId}") ?? 0);
+                            $calculated = $initial - $final;
+                            $difference = $reported - $calculated;
+                            $priceDiff = $difference * $category['price'];
+
+                            $diffColor = $priceDiff == 0 ? 'gray' : ($priceDiff > 0 ? 'success' : 'danger');
+
+                            return new HtmlString(
+                                "<span class='text-{$diffColor}-600 font-bold'>"
+                                . number_format(abs($priceDiff)) . " د.ع</span>"
                             );
                         }),
                 ])
-                ->columns(2),
-        ])
-        ->columnSpanFull();
+                ->columns(7)
+                ->extraAttributes(['class' => "{$bgColor} p-3 rounded-lg mb-2 border border-gray-200"]);
+        }
 
-    $fields[] = Forms\Components\Hidden::make('total_amount');
+        // کۆی گشتی
+        $fields[] = Forms\Components\Section::make('کۆی گشتی')
+            ->icon('heroicon-m-calculator')
+            ->schema([
+                Forms\Components\Grid::make(4)
+                    ->schema([
+                        Forms\Components\Placeholder::make('total_initial')
+                            ->label('کۆی سەرەتایی')
+                            ->content(function (callable $get) {
+                                $total = 0;
+                                $categories = Category::all();
 
-    return $fields;
-}
+                                foreach ($categories as $category) {
+                                    $total += floatval($get("initial_readings.{$category->id}") ?? 0);
+                                }
+
+                                return new HtmlString(
+                                    "<span class='text-blue-600 font-bold text-xl'>" .
+                                    number_format($total) . " لیتر</span>"
+                                );
+                            }),
+
+                        Forms\Components\Placeholder::make('total_final')
+                            ->label('کۆی کۆتایی')
+                            ->content(function (callable $get) {
+                                $total = 0;
+                                $categories = Category::all();
+
+                                foreach ($categories as $category) {
+                                    $total += floatval($get("final_readings.{$category->id}") ?? 0);
+                                }
+
+                                return new HtmlString(
+                                    "<span class='text-purple-600 font-bold text-xl'>" .
+                                    number_format($total) . " لیتر</span>"
+                                );
+                            }),
+
+                        Forms\Components\Placeholder::make('total_sold')
+                            ->label('کۆی فرۆشراو')
+                            ->content(function (callable $get) {
+                                $total = 0;
+                                $categories = Category::all();
+
+                                foreach ($categories as $category) {
+                                    $initial = floatval($get("initial_readings.{$category->id}") ?? 0);
+                                    $final = floatval($get("final_readings.{$category->id}") ?? 0);
+                                    $total += ($initial - $final);
+                                }
+
+                                return new HtmlString(
+                                    "<span class='text-success-600 font-bold text-xl'>" .
+                                    number_format($total) . " لیتر</span>"
+                                );
+                            }),
+
+                        Forms\Components\Placeholder::make('total_reported')
+                            ->label('کۆی فرۆشراوی تۆ')
+                            ->content(function (callable $get) {
+                                $total = 0;
+                                $categories = Category::all();
+
+                                foreach ($categories as $category) {
+                                    $total += floatval($get("reported_sold.{$category->id}") ?? 0);
+                                }
+
+                                return new HtmlString(
+                                    "<span class='text-info-600 font-bold text-xl'>" .
+                                    number_format($total) . " لیتر</span>"
+                                );
+                            }),
+                    ])
+                    ->columns(4),
+
+                Forms\Components\Grid::make(2)
+                    ->schema([
+                        Forms\Components\Placeholder::make('total_difference_liter')
+                            ->label('کۆی جیاوازی (لیتر)')
+                            ->content(function (callable $get) {
+                                $totalDiff = 0;
+                                $categories = Category::all();
+
+                                foreach ($categories as $category) {
+                                    $catId = $category->id;
+                                    $initial = floatval($get("initial_readings.{$catId}") ?? 0);
+                                    $final = floatval($get("final_readings.{$catId}") ?? 0);
+                                    $reported = floatval($get("reported_sold.{$catId}") ?? 0);
+                                    $calculated = $initial - $final;
+                                    $totalDiff += ($reported - $calculated);
+                                }
+
+                                $diffColor = $totalDiff == 0 ? 'gray' : ($totalDiff > 0 ? 'success' : 'danger');
+                                $icon = $totalDiff == 0 ? '✓' : ($totalDiff > 0 ? '↑' : '↓');
+
+                                return new HtmlString(
+                                    "<div class='flex items-center gap-2'>
+                                        <span class='text-{$diffColor}-600 font-bold text-2xl'>{$icon}</span>
+                                        <span class='text-{$diffColor}-600 font-bold text-2xl'>"
+                                        . number_format(abs($totalDiff)) . " لیتر</span>
+                                    </div>"
+                                );
+                            }),
+
+                        Forms\Components\Placeholder::make('total_difference_price')
+                            ->label('کۆی جیاوازی (دینار)')
+                            ->content(function (callable $get) {
+                                $totalDiffPrice = 0;
+                                $categories = Category::all();
+
+                                foreach ($categories as $category) {
+                                    $catId = $category->id;
+                                    $initial = floatval($get("initial_readings.{$catId}") ?? 0);
+                                    $final = floatval($get("final_readings.{$catId}") ?? 0);
+                                    $reported = floatval($get("reported_sold.{$catId}") ?? 0);
+                                    $calculated = $initial - $final;
+                                    $difference = $reported - $calculated;
+                                    $totalDiffPrice += $difference * $category->current_price;
+                                }
+
+                                $diffColor = $totalDiffPrice == 0 ? 'gray' : ($totalDiffPrice > 0 ? 'success' : 'danger');
+
+                                return new HtmlString(
+                                    "<span class='text-{$diffColor}-600 font-bold text-2xl'>"
+                                    . number_format(abs($totalDiffPrice)) . " د.ع</span>"
+                                );
+                            }),
+                    ])
+                    ->columns(2),
+
+                Forms\Components\Placeholder::make('total_amount_display')
+                    ->label('کۆی گشتی فرۆشراو (دینار)')
+                    ->content(function (callable $get) {
+                        $total = 0;
+                        $categories = Category::all();
+
+                        foreach ($categories as $category) {
+                            $initial = floatval($get("initial_readings.{$category->id}") ?? 0);
+                            $final = floatval($get("final_readings.{$category->id}") ?? 0);
+                            $sold = $initial - $final;
+                            $total += $sold * $category->current_price;
+                        }
+
+                        return new HtmlString(
+                            "<span class='text-success-600 font-bold text-3xl'>" .
+                            number_format($total) . " دینار</span>"
+                        );
+                    })
+                    ->extraAttributes(['class' => 'text-center']),
+            ])
+            ->columnSpanFull();
+
+        $fields[] = Forms\Components\Hidden::make('total_amount');
+
+        return $fields;
+    }
+
     private static function updateCalculations(callable $set, callable $get)
     {
         $total = 0;
@@ -748,7 +753,7 @@ private static function getSummaryFields(): array
                         ->label('داخستنی ڕۆژ')
                         ->icon('heroicon-m-lock-closed')
                         ->color(Color::Red)
-                        ->visible(fn ($record): bool => $record->status === 'open')
+                        ->visible(fn ($record): bool => $record && $record->status === 'open')
                         ->requiresConfirmation()
                         ->action(function ($record) {
                             $record->update([
@@ -766,7 +771,7 @@ private static function getSummaryFields(): array
                         ->label('کردنەوەی ڕۆژ')
                         ->icon('heroicon-m-lock-open')
                         ->color(Color::Orange)
-                        ->visible(fn ($record): bool => $record->status === 'closed')
+                        ->visible(fn ($record): bool => $record && $record->status === 'closed')
                         ->requiresConfirmation()
                         ->action(function ($record) {
                             $record->update([
