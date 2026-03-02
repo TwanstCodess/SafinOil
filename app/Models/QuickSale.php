@@ -120,17 +120,4 @@ class QuickSale extends Model
             'total' => $total,
         ];
     }
-
-    /**
-     * وەرگرتنی ڕەنگی بۆ دیزاین
-     */
-    public function getTypeColor($typeKey)
-    {
-        return match($typeKey) {
-            'fuel' => 'warning',
-            'oil' => 'success',
-            'gas' => 'info',
-            default => 'gray',
-        };
-    }
 }
