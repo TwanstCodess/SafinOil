@@ -152,7 +152,6 @@ class QuickSaleResource extends Resource
                     ->columnSpanFull(),
             ]);
     }
-
     private static function getInitialReadingsFields(): array
     {
         $fields = [];
