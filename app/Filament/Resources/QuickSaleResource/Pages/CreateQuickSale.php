@@ -7,7 +7,7 @@ use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Support\Facades\Auth;
 use App\Models\QuickSale;
 use App\Models\Category;
-use Filament\Notifications\Notification;
+
 class CreateQuickSale extends CreateRecord
 {
     protected static string $resource = QuickSaleResource::class;
@@ -17,7 +17,7 @@ class CreateQuickSale extends CreateRecord
         $data['created_by'] = Auth::id();
         $data['status'] = 'open';
 
-        // پڕکردنەوەی reported_sold بە دیفۆڵت
+        // پڕکردنەوەی reported_sold بە دیفۆڵت (دوای create، calculateAll جێبەجێ دەبێت)
         if (!isset($data['reported_sold'])) {
             $data['reported_sold'] = [];
             $categories = Category::all();
@@ -31,9 +31,10 @@ class CreateQuickSale extends CreateRecord
 
     protected function afterCreate(): void
     {
+        // حسابکردن و کۆپی کردنی فرۆشراوەکان بۆ reported_sold
         $this->record->calculateAll();
 
-        Notification::make()
+        \Filament\Notifications\Notification::make()
             ->title('فرۆشی خێرا بە سەرکەوتوویی تۆمارکرا')
             ->success()
             ->send();
