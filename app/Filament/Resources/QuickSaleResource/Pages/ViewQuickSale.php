@@ -13,6 +13,8 @@ class ViewQuickSale extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            Actions\EditAction::make()
+                ->label('دەستکاری'),
             Actions\Action::make('back')
                 ->label('گەڕانەوە')
                 ->url(fn (): string => QuickSaleResource::getUrl('index'))
@@ -21,4 +23,3 @@ class ViewQuickSale extends ViewRecord
         ];
     }
 }
-//

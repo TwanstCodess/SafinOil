@@ -7,14 +7,13 @@ use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Support\Facades\Auth;
 use App\Models\QuickSale;
 use App\Models\Category;
-
+use Filament\Notifications\Notification;
 class CreateQuickSale extends CreateRecord
 {
     protected static string $resource = QuickSaleResource::class;
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
-        // پڕکردنەوەی created_by
         $data['created_by'] = Auth::id();
         $data['status'] = 'open';
 
@@ -27,19 +26,14 @@ class CreateQuickSale extends CreateRecord
             }
         }
 
-        // پڕکردنەوەی categories_data
-        $data['categories_data'] = QuickSale::getCategoriesGroupedByType();
-
         return $data;
     }
 
     protected function afterCreate(): void
     {
-        // حسابکردنی فرۆشراوەکان و جیاوازی
         $this->record->calculateAll();
 
-        // نیشاندانی پەیامی سەرکەوتن
-        \Filament\Notifications\Notification::make()
+        Notification::make()
             ->title('فرۆشی خێرا بە سەرکەوتوویی تۆمارکرا')
             ->success()
             ->send();
