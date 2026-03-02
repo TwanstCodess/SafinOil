@@ -218,4 +218,54 @@ class QuickSale extends Model
 
         return $this;
     }
+
+
+    // app/Models/QuickSale.php
+// زیادکردنی ئەم میتۆدە بۆ کۆکردنەوەی کۆی گشتی
+
+public static function getTotalsByDate($date = null)
+{
+    $date = $date ?? now()->format('Y-m-d');
+
+    $query = self::whereDate('sale_date', $date);
+
+    $totals = [
+        'morning' => [
+            'count' => 0,
+            'total_liters' => 0,
+            'total_amount' => 0,
+        ],
+        'evening' => [
+            'count' => 0,
+            'total_liters' => 0,
+            'total_amount' => 0,
+        ],
+    ];
+
+    $sales = $query->get();
+
+    foreach ($sales as $sale) {
+        $shift = $sale->shift;
+        $totals[$shift]['count']++;
+        $totals[$shift]['total_liters'] += $sale->total_liters ?? 0;
+        $totals[$shift]['total_amount'] += $sale->total_amount ?? 0;
+    }
+
+    return $totals;
+}
+
+// ئەم ئەتربیوتە زیاد بکە بۆ کۆی لیتر
+public function getTotalLitersAttribute()
+{
+    $total = 0;
+    $readings = $this->readings ?? [];
+
+    foreach ($readings as $categoryId => $reading) {
+        $initial = floatval($reading['initial'] ?? 0);
+        $final = floatval($reading['final'] ?? 0);
+        $total += ($initial - $final);
+    }
+
+    return $total;
+}
 }
