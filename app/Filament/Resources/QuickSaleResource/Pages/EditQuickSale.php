@@ -33,6 +33,8 @@ class EditQuickSale extends EditRecord
             $data['sale_date'] = Carbon::now()->format('Y-m-d');
         }
 
+        // total_amount و total_liters لە فۆرم حساب دەکرێت بۆ نیشاندان
+        // بەڵام ڕاستەقینەی حسابکردن لە applyDifferencesToStockAndCash() دەکرێت
         $totalAmount = 0;
         $totalLiters = 0;
 
@@ -55,25 +57,24 @@ class EditQuickSale extends EditRecord
     protected function afterSave(): void
     {
         try {
-            // *** گرینگ: DB::beginTransaction() لێرە نەخرابێت ***
-            // applyDifferencesToStockAndCash() خۆی transaction ی خۆی دەکات
-            // nested transaction کێشەی reverse ی قاسە درووست دەکات
-
-            // جێبەجێکردنی جیاوازیەکان بۆ شەفتی ئەمە
+            // *** تەنها بۆ شەفتی ئەمە applyDifferencesToStockAndCash() بگرێتەوە ***
+            // شەفتی ئێوارە هەرگیز لێرەوە نагرێتەوە
             $result = $this->record->applyDifferencesToStockAndCash();
 
-            // ئەگەر شەفتی بەیانی داخرا، شەفتی ئێوارە نوێ بکەرەوە
+            // ئەگەر شەفتی بەیانی داخرا:
+            // تەنها initial_readings ی شەفتی ئێوارە نوێ بکەوە
+            // *** applyDifferencesToStockAndCash بۆ ئێوارە ناگرێتەوە ***
             if ($this->record->shift === 'morning' && $this->record->status === 'closed') {
                 $eveningShift = QuickSale::whereDate('sale_date', $this->record->sale_date)
                     ->where('shift', 'evening')
                     ->first();
 
                 if ($eveningShift && $eveningShift->status === 'open') {
+                    // saveQuietly بەکاربێنە بۆ ئەوەی afterSave() ی ئێوارە trigger نەبێت
                     $eveningShift->initial_readings = $this->record->final_readings;
                     $eveningShift->saveQuietly();
 
-                    // ئەمەش خۆی transaction ی خۆی دەکات
-                    $eveningShift->applyDifferencesToStockAndCash();
+                    Log::info("شەفتی ئێوارە initial_readings نوێ کرایەوە لە بەیانی");
 
                     Notification::make()
                         ->info()
@@ -106,13 +107,15 @@ class EditQuickSale extends EditRecord
                 ->persistent()
                 ->send();
         } else {
+            $body = !empty($result['error'])
+                ? $result['error']
+                : 'کۆی گشتی: ' . number_format($this->record->total_amount) .
+                  ' دینار - ' . number_format($this->record->total_liters) . ' لیتر';
+
             Notification::make()
                 ->title('فرۆشی خێرا نوێ کرایەوە')
                 ->success()
-                ->body(
-                    'کۆی گشتی: ' . number_format($this->record->total_amount) .
-                    ' دینار - ' . number_format($this->record->total_liters) . ' لیتر'
-                )
+                ->body($body)
                 ->send();
         }
     }
