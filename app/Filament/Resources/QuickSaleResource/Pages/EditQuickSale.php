@@ -42,7 +42,7 @@ class EditQuickSale extends EditRecord
             $final   = floatval($data['final_readings'][$catId]   ?? 0);
             $sold    = $initial - $final;
 
-            $totalAmount += $sold * $category->current_price;
+            $totalAmount += $sold * floatval($category->current_price);
             $totalLiters += $sold;
         }
 
@@ -56,26 +56,22 @@ class EditQuickSale extends EditRecord
     {
         try {
             // *** گرینگ: DB::beginTransaction() لێرە نەخرابێت ***
-            // چونکە applyDifferencesToStockAndCash() خۆی
-            // DB::beginTransaction() و DB::commit() و DB::rollBack() دەکات
-            // ئەگەر لێرەش transaction دابکەین، nested transaction دروست دەبێت
-            // و reverse بۆ قاسە دروست کار ناکات
+            // applyDifferencesToStockAndCash() خۆی transaction ی خۆی دەکات
+            // nested transaction کێشەی reverse ی قاسە درووست دەکات
 
             // جێبەجێکردنی جیاوازیەکان بۆ شەفتی ئەمە
             $result = $this->record->applyDifferencesToStockAndCash();
 
-            // ئەگەر شەفتی بەیانی داخرا، شەفتی ئێوارەی هەمان ڕۆژ نوێ بکەرەوە
+            // ئەگەر شەفتی بەیانی داخرا، شەفتی ئێوارە نوێ بکەرەوە
             if ($this->record->shift === 'morning' && $this->record->status === 'closed') {
                 $eveningShift = QuickSale::whereDate('sale_date', $this->record->sale_date)
                     ->where('shift', 'evening')
                     ->first();
 
                 if ($eveningShift && $eveningShift->status === 'open') {
-                    // تەنها خوێندنەوەی سەرەتایی شەفتی ئێوارە نوێ بکەوە
                     $eveningShift->initial_readings = $this->record->final_readings;
                     $eveningShift->saveQuietly();
 
-                    // جیاوازیەکانی شەفتی ئێوارە جێبەجێ بکە
                     // ئەمەش خۆی transaction ی خۆی دەکات
                     $eveningShift->applyDifferencesToStockAndCash();
 
@@ -110,15 +106,13 @@ class EditQuickSale extends EditRecord
                 ->persistent()
                 ->send();
         } else {
-            $body = !empty($result['error'])
-                ? $result['error']
-                : 'کۆی گشتی: ' . number_format($this->record->total_amount) .
-                  ' دینار - ' . number_format($this->record->total_liters) . ' لیتر';
-
             Notification::make()
                 ->title('فرۆشی خێرا نوێ کرایەوە')
                 ->success()
-                ->body($body)
+                ->body(
+                    'کۆی گشتی: ' . number_format($this->record->total_amount) .
+                    ' دینار - ' . number_format($this->record->total_liters) . ' لیتر'
+                )
                 ->send();
         }
     }

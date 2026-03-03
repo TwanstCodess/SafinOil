@@ -14,7 +14,7 @@ return new class extends Migration
             $table->foreignId('type_id')->constrained('types')->onDelete('restrict');
             $table->decimal('current_price', 10, 2);
             $table->decimal('purchase_price', 10, 2);
-            $table->integer('stock_liters')->default(0);
+            $table->decimal('stock_liters', 15, 2)->default(0)->change();
             $table->timestamps();
         });
     }
