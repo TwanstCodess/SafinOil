@@ -279,9 +279,9 @@ class QuickSale extends Model
     }
 
     /**
-     * حسابکردنی فرۆشراوەکان لەسەر بنەمای خوێندنەوەکان (تەنها بۆ بەکارهێنانی ناوەکی)
+     * حسابکردنی فرۆشراوەکان لەسەر بنەمای خوێندنەوەکان
      */
-    protected function calculateSoldFromReadings()
+    public function calculateSoldFromReadings()
     {
         $initial = $this->initial_readings ?? [];
         $final = $this->final_readings ?? [];
@@ -315,9 +315,9 @@ class QuickSale extends Model
     }
 
     /**
-     * حسابکردنی جیاوازی لەگەڵ فرۆشراوەکانی تۆ (تەنها بۆ بەکارهێنانی ناوەکی)
+     * حسابکردنی جیاوازی لەگەڵ فرۆشراوەکانی تۆ
      */
-    protected function calculateDifferences()
+    public function calculateDifferences()
     {
         $sold = $this->sold_data ?? [];
         $reported = $this->reported_sold ?? [];
