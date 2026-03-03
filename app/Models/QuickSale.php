@@ -6,7 +6,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use App\Models\Category;
 use App\Models\User;
+use App\Models\Cash;
+use App\Models\Transaction;
+use App\Models\Sale;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class QuickSale extends Model
 {
@@ -224,6 +229,194 @@ class QuickSale extends Model
         $this->calculateDifferences();
 
         return $this;
+    }
+
+    /**
+     * جێبەجێکردنی جیاوازیەکان بۆ کۆگا و قاسە
+     */
+    public function applyDifferencesToStockAndCash()
+    {
+        $differences = $this->differences ?? [];
+        if (empty($differences)) {
+            return [
+                'applied' => false,
+                'message' => 'هیچ جیاوازیەک نییە'
+            ];
+        }
+
+        $categories = Category::all()->keyBy('id');
+        $results = [
+            'positive' => [],
+            'negative' => [],
+            'total_positive_amount' => 0,
+            'total_negative_amount' => 0,
+        ];
+
+        DB::beginTransaction();
+
+        try {
+            foreach ($differences as $catId => $diff) {
+                if (abs($diff) < 0.01) continue;
+
+                $category = $categories[$catId] ?? null;
+                if (!$category) continue;
+
+                $pricePerLiter = $category->current_price;
+                $totalPrice = abs($diff) * $pricePerLiter;
+
+                if ($diff > 0) {
+                    // جیاوازی ئەرێنی (فرۆشراوی تۆ زیاترە)
+                    // => بڕەکە لە کۆگا کەم دەکەینەوە و پارەکە دەچێتە قاسە
+
+                    // کەمکردنەوە لە کۆگا
+                    $category->updateStock($diff, 'subtract');
+
+                    $results['positive'][] = [
+                        'category' => $category->name,
+                        'liters' => $diff,
+                        'price' => $totalPrice
+                    ];
+                    $results['total_positive_amount'] += $totalPrice;
+
+                } else {
+                    // جیاوازی نەرێنی (فرۆشراوی تۆ کەمترە)
+                    // => بڕەکە لە کۆگا دەمێنێتەوە، هیچ کارێک ناکەین
+
+                    $results['negative'][] = [
+                        'category' => $category->name,
+                        'liters' => abs($diff),
+                        'price' => $totalPrice
+                    ];
+                    $results['total_negative_amount'] += $totalPrice;
+                }
+            }
+
+            // زیادکردنی پارە بۆ قاسە (ئەگەر جیاوازی ئەرێنی هەبێت)
+            if ($results['total_positive_amount'] > 0) {
+                $this->addMoneyToCash($results['total_positive_amount']);
+            }
+
+            DB::commit();
+
+            return [
+                'applied' => true,
+                'results' => $results
+            ];
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error in applyDifferencesToStockAndCash: ' . $e->getMessage());
+
+            return [
+                'applied' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * زیادکردنی پارە بۆ قاسە
+     */
+    protected function addMoneyToCash($amount)
+    {
+        $cash = Cash::first();
+        if (!$cash) {
+            $cash = Cash::create([
+                'balance' => 0,
+                'total_income' => 0,
+                'total_expense' => 0,
+                'capital' => 0,
+                'profit' => 0,
+                'last_update' => now(),
+            ]);
+        }
+
+        $balanceBefore = $cash->balance;
+        $cash->balance += $amount;
+        $cash->total_income += $amount;
+        $cash->last_update = now();
+        $cash->save();
+
+        // تۆمارکردنی مامەڵە
+        Transaction::create([
+            'transaction_number' => Transaction::generateTransactionNumber(),
+            'type' => 'quick_sale_difference',
+            'amount' => $amount,
+            'balance_before' => $balanceBefore,
+            'balance_after' => $cash->balance,
+            'reference_number' => $this->id,
+            'description' => "جیاوازی فرۆشی خێرا - شەفتی {$this->shift_name} - " . number_format($amount) . " د.ع",
+            'transaction_date' => $this->sale_date,
+            'created_by' => auth()->user()?->name ?? 'سیستەم',
+        ]);
+
+        return $cash;
+    }
+
+    /**
+     * تۆمارکردنی فرۆشتن بۆ جیاوازیەکان
+     */
+    public function createSalesForDifferences()
+    {
+        $differences = $this->differences ?? [];
+        if (empty($differences)) {
+            return [];
+        }
+
+        $categories = Category::all()->keyBy('id');
+        $sales = [];
+
+        DB::beginTransaction();
+
+        try {
+            foreach ($differences as $catId => $diff) {
+                if ($diff <= 0.01) continue; // تەنها جیاوازی ئەرێنی
+
+                $category = $categories[$catId] ?? null;
+                if (!$category) continue;
+
+                $pricePerLiter = $category->current_price;
+                $totalPrice = $diff * $pricePerLiter;
+
+                // تۆمارکردنی فرۆشتن
+                $sale = Sale::create([
+                    'category_id' => $category->id,
+                    'liters' => $diff,
+                    'price_per_liter' => $pricePerLiter,
+                    'total_price' => $totalPrice,
+                    'sale_date' => $this->sale_date,
+                    'payment_type' => 'cash',
+                    'status' => 'paid',
+                    'paid_amount' => $totalPrice,
+                    'remaining_amount' => 0,
+                    'notes' => "فرۆشتنی جیاوازی لە شەفتی {$this->shift_name}",
+                ]);
+
+                $sales[] = $sale;
+
+                // پەیوەستکردنی transaction بە sale
+                $transaction = Transaction::where('reference_number', $this->id)
+                    ->where('type', 'quick_sale_difference')
+                    ->latest()
+                    ->first();
+
+                if ($transaction) {
+                    $transaction->transactionable_type = Sale::class;
+                    $transaction->transactionable_id = $sale->id;
+                    $transaction->save();
+                }
+            }
+
+            DB::commit();
+
+            return $sales;
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error in createSalesForDifferences: ' . $e->getMessage());
+
+            return [];
+        }
     }
 
     /**
