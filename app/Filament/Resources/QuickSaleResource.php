@@ -1244,7 +1244,7 @@ class QuickSaleResource extends Resource
             'index' => Pages\ListQuickSales::route('/'),
             'create' => Pages\CreateQuickSale::route('/create'),
             'edit' => Pages\EditQuickSale::route('/{record}/edit'),
-            'view' => Pages\ViewQuickSale::route('/{record}'),
+            // 'view' => Pages\ViewQuickSale::route('/{record}'),
         ];
     }
 }
