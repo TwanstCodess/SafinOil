@@ -15,7 +15,6 @@ use Filament\Tables\Filters\TernaryFilter;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\TextInput;
 use Filament\Tables\Enums\FiltersLayout;
-use Filament\Support\Colors\Color;
 use Illuminate\Database\Eloquent\Builder;
 
 class TransactionResource extends Resource
@@ -40,16 +39,18 @@ class TransactionResource extends Resource
                         Forms\Components\Select::make('type')
                             ->label('جۆری مامەڵە')
                             ->options([
-                                'purchase' => '📦 کڕین',
-                                'sale' => '🛒 فرۆشتن',
-                                'expense' => '📉 خەرجی',
-                                'salary' => '👤 مووچە',
-                                'penalty' => '⚠️ سزا',
-                                'capital_add' => '💰 زیادکردنی سەرمایە',
-                                'capital_withdraw' => '💸 کەمکردنەوەی سەرمایە',
-                                'cash_add' => '💵 زیادکردنی پارە',
-                                'cash_withdraw' => '🏧 کەمکردنەوەی پارە',
-                                'credit_payment' => '💳 دانەوەی قەرز',
+                                'purchase'          => '📦 کڕین',
+                                'sale'              => '🛒 فرۆشتن',
+                                'quick_sale'        => '⚡ فرۆشی خێرا',
+                                'quick_sale_difference' => '⚡ جیاوازی فرۆشی خێرا',
+                                'expense'           => '📉 خەرجی',
+                                'salary'            => '👤 مووچە',
+                                'penalty'           => '⚠️ سزا',
+                                'capital_add'       => '💰 زیادکردنی سەرمایە',
+                                'capital_withdraw'  => '💸 کەمکردنەوەی سەرمایە',
+                                'cash_add'          => '💵 زیادکردنی پارە',
+                                'cash_withdraw'     => '🏧 کەمکردنەوەی پارە',
+                                'credit_payment'    => '💳 دانەوەی قەرز',
                             ])
                             ->required()
                             ->disabled()
@@ -117,9 +118,18 @@ class TransactionResource extends Resource
                     ->searchable()
                     ->sortable(),
 
+                // *** ستوونی بڕی پارە ***
+                // ئەگەر جۆری quick_sale_difference بوو، بڕەکە × 2 نیشان دەدرێت
+                // چونکە لیتری DB ÷ 2 کرابوو، بەڵام پارەی ڕاستەقینە = بڕی DB × 2
                 Tables\Columns\TextColumn::make('amount')
                     ->label('بڕی پارە')
-                    ->money('IQD')
+                    ->formatStateUsing(function ($state, Transaction $record): string {
+                        $amount = $record->type === 'quick_sale_difference'
+                            ? floatval($state) * 2
+                            : floatval($state);
+
+                        return number_format($amount) . ' د.ع';
+                    })
                     ->sortable()
                     ->color(fn (Transaction $record): string =>
                         $record->is_income ? 'success' : 'danger'
@@ -167,100 +177,79 @@ class TransactionResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
 
-            // **فلتەرە پڕۆفیشناڵەکان**
             ->filters([
-                // فلتەری جۆری مامەڵە
                 SelectFilter::make('type')
                     ->label('جۆری مامەڵە')
                     ->options([
-                        'purchase' => '📦 کڕین',
-                        'sale' => '🛒 فرۆشتن',
-                        'expense' => '📉 خەرجی',
-                        'salary' => '👤 مووچە',
-                        'penalty' => '⚠️ سزا',
-                        'capital_add' => '💰 زیادکردنی سەرمایە',
-                        'capital_withdraw' => '💸 کەمکردنەوەی سەرمایە',
-                        'cash_add' => '💵 زیادکردنی پارە',
-                        'cash_withdraw' => '🏧 کەمکردنەوەی پارە',
-                        'credit_payment' => '💳 دانەوەی قەرز',
+                        'purchase'          => '📦 کڕین',
+                        'sale'              => '🛒 فرۆشتن',
+                        'quick_sale'        => '⚡ فرۆشی خێرا',
+                        'quick_sale_difference' => '⚡ جیاوازی فرۆشی خێرا',
+                        'expense'           => '📉 خەرجی',
+                        'salary'            => '👤 مووچە',
+                        'penalty'           => '⚠️ سزا',
+                        'capital_add'       => '💰 زیادکردنی سەرمایە',
+                        'capital_withdraw'  => '💸 کەمکردنەوەی سەرمایە',
+                        'cash_add'          => '💵 زیادکردنی پارە',
+                        'cash_withdraw'     => '🏧 کەمکردنەوەی پارە',
+                        'credit_payment'    => '💳 دانەوەی قەرز',
                     ])
                     ->multiple()
                     ->searchable()
                     ->preload()
-                    ->optionsLimit(10)
+                    ->optionsLimit(12)
                     ->indicator('جۆر')
                     ->placeholder('هەموو جۆرەکان')
                     ->columnSpan(2),
 
-                // فلتەری داهات/خەرجی
                 SelectFilter::make('impact')
                     ->label('کاریگەری لەسەر قاسە')
                     ->options([
-                        'income' => '📈 داهات (زیادکردن)',
+                        'income'  => '📈 داهات (زیادکردن)',
                         'expense' => '📉 خەرجی (کەمکردن)',
                     ])
                     ->query(function (Builder $query, array $data) {
-                        if (empty($data['value'])) {
-                            return $query;
-                        }
+                        if (empty($data['value'])) return $query;
                         return match($data['value']) {
-                            'income' => $query->whereIn('type', ['sale', 'cash_add', 'capital_add', 'credit_payment']),
+                            'income'  => $query->whereIn('type', ['sale', 'quick_sale', 'quick_sale_difference', 'cash_add', 'capital_add', 'credit_payment']),
                             'expense' => $query->whereIn('type', ['purchase', 'expense', 'salary', 'penalty', 'cash_withdraw', 'capital_withdraw']),
-                            default => $query,
+                            default   => $query,
                         };
                     })
                     ->indicateUsing(function (array $data) {
                         return match($data['value'] ?? null) {
-                            'income' => '📈 داهات',
+                            'income'  => '📈 داهات',
                             'expense' => '📉 خەرجی',
-                            default => null,
+                            default   => null,
                         };
                     })
                     ->columnSpan(1),
 
-                // فلتەری مەودای بەروار
                 Filter::make('date_range')
                     ->label('مەودای بەروار')
                     ->form([
-                        DatePicker::make('from_date')
-                            ->label('لە ڕێکەوتی')
-                            ->placeholder('YYYY-MM-DD'),
-                        DatePicker::make('to_date')
-                            ->label('تا ڕێکەوتی')
-                            ->placeholder('YYYY-MM-DD'),
+                        DatePicker::make('from_date')->label('لە ڕێکەوتی')->placeholder('YYYY-MM-DD'),
+                        DatePicker::make('to_date')->label('تا ڕێکەوتی')->placeholder('YYYY-MM-DD'),
                     ])
                     ->query(function (Builder $query, array $data) {
                         return $query
                             ->when($data['from_date'], fn ($q) => $q->whereDate('transaction_date', '>=', $data['from_date']))
-                            ->when($data['to_date'], fn ($q) => $q->whereDate('transaction_date', '<=', $data['to_date']));
+                            ->when($data['to_date'],   fn ($q) => $q->whereDate('transaction_date', '<=', $data['to_date']));
                     })
                     ->indicateUsing(function (array $data) {
                         $indicators = [];
-                        if ($data['from_date'] ?? null) {
-                            $indicators[] = 'لە ' . \Carbon\Carbon::parse($data['from_date'])->format('Y/m/d');
-                        }
-                        if ($data['to_date'] ?? null) {
-                            $indicators[] = 'تا ' . \Carbon\Carbon::parse($data['to_date'])->format('Y/m/d');
-                        }
+                        if ($data['from_date'] ?? null) $indicators[] = 'لە ' . \Carbon\Carbon::parse($data['from_date'])->format('Y/m/d');
+                        if ($data['to_date']   ?? null) $indicators[] = 'تا ' . \Carbon\Carbon::parse($data['to_date'])->format('Y/m/d');
                         return $indicators ? 'بەروار: ' . implode(' - ', $indicators) : null;
                     })
                     ->columns(2)
                     ->columnSpan(2),
 
-                // فلتەری مەودای بڕی پارە
                 Filter::make('amount_range')
                     ->label('مەودای بڕی پارە')
                     ->form([
-                        TextInput::make('min_amount')
-                            ->label('کەمترین بڕ')
-                            ->numeric()
-                            ->prefix('دینار')
-                            ->placeholder('١٠٠٠'),
-                        TextInput::make('max_amount')
-                            ->label('زۆرترین بڕ')
-                            ->numeric()
-                            ->prefix('دینار')
-                            ->placeholder('١٠٠٠٠٠٠'),
+                        TextInput::make('min_amount')->label('کەمترین بڕ')->numeric()->prefix('دینار')->placeholder('١٠٠٠'),
+                        TextInput::make('max_amount')->label('زۆرترین بڕ')->numeric()->prefix('دینار')->placeholder('١٠٠٠٠٠٠'),
                     ])
                     ->query(function (Builder $query, array $data) {
                         return $query
@@ -269,67 +258,50 @@ class TransactionResource extends Resource
                     })
                     ->indicateUsing(function (array $data) {
                         $indicators = [];
-                        if ($data['min_amount'] ?? null) {
-                            $indicators[] = 'کەمتر نییە لە ' . number_format($data['min_amount']) . ' د.ع';
-                        }
-                        if ($data['max_amount'] ?? null) {
-                            $indicators[] = 'زیاتر نییە لە ' . number_format($data['max_amount']) . ' د.ع';
-                        }
+                        if ($data['min_amount'] ?? null) $indicators[] = 'کەمتر نییە لە ' . number_format($data['min_amount']) . ' د.ع';
+                        if ($data['max_amount'] ?? null) $indicators[] = 'زیاتر نییە لە ' . number_format($data['max_amount']) . ' د.ع';
                         return $indicators ? 'بڕی پارە: ' . implode(' و ', $indicators) : null;
                     })
                     ->columns(2)
                     ->columnSpan(2),
 
-                // فلتەری ئاستی بڕی پارە
                 SelectFilter::make('amount_level')
                     ->label('ئاستی بڕی پارە')
                     ->options([
                         'very_large' => 'زۆر گەورە (> ١٠ ملیۆن)',
-                        'large' => 'گەورە (١ ملیۆن - ١٠ ملیۆن)',
-                        'medium' => 'مامناوەند (١٠٠ هەزار - ١ ملیۆن)',
-                        'small' => 'بچوک (١٠ هەزار - ١٠٠ هەزار)',
+                        'large'      => 'گەورە (١ ملیۆن - ١٠ ملیۆن)',
+                        'medium'     => 'مامناوەند (١٠٠ هەزار - ١ ملیۆن)',
+                        'small'      => 'بچوک (١٠ هەزار - ١٠٠ هەزار)',
                         'very_small' => 'زۆر بچوک (< ١٠ هەزار)',
                     ])
                     ->query(function (Builder $query, array $data) {
-                        if (empty($data['value'])) {
-                            return $query;
-                        }
-
+                        if (empty($data['value'])) return $query;
                         return match($data['value']) {
                             'very_large' => $query->where('amount', '>', 10000000),
-                            'large' => $query->whereBetween('amount', [1000000, 10000000]),
-                            'medium' => $query->whereBetween('amount', [100000, 1000000]),
-                            'small' => $query->whereBetween('amount', [10000, 100000]),
+                            'large'      => $query->whereBetween('amount', [1000000, 10000000]),
+                            'medium'     => $query->whereBetween('amount', [100000, 1000000]),
+                            'small'      => $query->whereBetween('amount', [10000, 100000]),
                             'very_small' => $query->where('amount', '<', 10000),
-                            default => $query,
+                            default      => $query,
                         };
                     })
                     ->indicateUsing(function (array $data) {
                         return match($data['value'] ?? null) {
                             'very_large' => 'بڕی زۆر گەورە',
-                            'large' => 'بڕی گەورە',
-                            'medium' => 'بڕی مامناوەند',
-                            'small' => 'بڕی بچوک',
+                            'large'      => 'بڕی گەورە',
+                            'medium'     => 'بڕی مامناوەند',
+                            'small'      => 'بڕی بچوک',
                             'very_small' => 'بڕی زۆر بچوک',
-                            default => null,
+                            default      => null,
                         };
                     })
                     ->columnSpan(1),
 
-                // فلتەری مەودای ڕەوشتی قاسە (پێش)
                 Filter::make('balance_before_range')
                     ->label('مەودای ڕەوشتی قاسە (پێش)')
                     ->form([
-                        TextInput::make('min_balance_before')
-                            ->label('کەمترین')
-                            ->numeric()
-                            ->prefix('دینار')
-                            ->placeholder('٠'),
-                        TextInput::make('max_balance_before')
-                            ->label('زۆرترین')
-                            ->numeric()
-                            ->prefix('دینار')
-                            ->placeholder('١٠٠٠٠٠٠٠'),
+                        TextInput::make('min_balance_before')->label('کەمترین')->numeric()->prefix('دینار')->placeholder('٠'),
+                        TextInput::make('max_balance_before')->label('زۆرترین')->numeric()->prefix('دینار')->placeholder('١٠٠٠٠٠٠٠'),
                     ])
                     ->query(function (Builder $query, array $data) {
                         return $query
@@ -338,127 +310,92 @@ class TransactionResource extends Resource
                     })
                     ->indicateUsing(function (array $data) {
                         $indicators = [];
-                        if ($data['min_balance_before'] ?? null) {
-                            $indicators[] = 'کەمتر نییە لە ' . number_format($data['min_balance_before']) . ' د.ع';
-                        }
-                        if ($data['max_balance_before'] ?? null) {
-                            $indicators[] = 'زیاتر نییە لە ' . number_format($data['max_balance_before']) . ' د.ع';
-                        }
+                        if ($data['min_balance_before'] ?? null) $indicators[] = 'کەمتر نییە لە ' . number_format($data['min_balance_before']) . ' د.ع';
+                        if ($data['max_balance_before'] ?? null) $indicators[] = 'زیاتر نییە لە ' . number_format($data['max_balance_before']) . ' د.ع';
                         return $indicators ? 'ڕەوشتی قاسە (پێش): ' . implode(' و ', $indicators) : null;
                     })
                     ->columns(2)
                     ->columnSpan(2),
 
-                // فلتەری ژمارەی سەرچاوە
                 Filter::make('reference_number_search')
                     ->label('ژمارەی سەرچاوە')
                     ->form([
-                        TextInput::make('reference')
-                            ->label('ژمارە')
-                            ->placeholder('REF-20250228-...')
-                            ->maxLength(255),
+                        TextInput::make('reference')->label('ژمارە')->placeholder('REF-...')->maxLength(255),
                     ])
                     ->query(function (Builder $query, array $data) {
-                        return $query
-                            ->when($data['reference'], fn ($q) => $q->where('reference_number', 'LIKE', '%' . $data['reference'] . '%'));
+                        return $query->when($data['reference'], fn ($q) => $q->where('reference_number', 'LIKE', '%' . $data['reference'] . '%'));
                     })
                     ->indicateUsing(function (array $data) {
-                        if ($data['reference'] ?? null) {
-                            return 'ژ. سەرچاوە: ' . $data['reference'];
-                        }
-                        return null;
+                        return ($data['reference'] ?? null) ? 'ژ. سەرچاوە: ' . $data['reference'] : null;
                     }),
 
-                // فلتەری گەڕان لە وەسف
                 Filter::make('description_search')
                     ->label('گەڕان لە وەسف')
                     ->form([
-                        TextInput::make('search')
-                            ->label('وشە')
-                            ->placeholder('وشەی گەڕان ...')
-                            ->maxLength(100),
+                        TextInput::make('search')->label('وشە')->placeholder('وشەی گەڕان ...')->maxLength(100),
                     ])
                     ->query(function (Builder $query, array $data) {
-                        return $query
-                            ->when($data['search'], fn ($q) => $q->where('description', 'LIKE', '%' . $data['search'] . '%'));
+                        return $query->when($data['search'], fn ($q) => $q->where('description', 'LIKE', '%' . $data['search'] . '%'));
                     })
                     ->indicateUsing(function (array $data) {
-                        if ($data['search'] ?? null) {
-                            return 'گەڕان: "' . $data['search'] . '"';
-                        }
-                        return null;
+                        return ($data['search'] ?? null) ? 'گەڕان: "' . $data['search'] . '"' : null;
                     }),
 
-                // فلتەری بەکارهێنەر
                 SelectFilter::make('created_by')
                     ->label('تۆمارکراو لەلایەن')
-                    ->options(function () {
-                        return Transaction::distinct()
-                            ->pluck('created_by', 'created_by')
-                            ->filter()
-                            ->toArray();
-                    })
+                    ->options(fn () => Transaction::distinct()->pluck('created_by', 'created_by')->filter()->toArray())
                     ->multiple()
                     ->searchable()
                     ->indicator('بەکارهێنەر')
                     ->columnSpan(1),
 
-                // فلتەری ئەمڕۆ
                 Filter::make('today')
                     ->label('مامەڵەکانی ئەمڕۆ')
                     ->toggle()
                     ->query(fn ($query) => $query->whereDate('transaction_date', today()))
                     ->indicator('ئەمڕۆ'),
 
-                // فلتەری دوێنێ
                 Filter::make('yesterday')
                     ->label('مامەڵەکانی دوێنێ')
                     ->toggle()
                     ->query(fn ($query) => $query->whereDate('transaction_date', today()->subDay()))
                     ->indicator('دوێنێ'),
 
-                // فلتەری ئەم هەفتەیە
                 Filter::make('this_week')
                     ->label('مامەڵەکانی ئەم هەفتەیە')
                     ->toggle()
                     ->query(fn ($query) => $query->whereBetween('transaction_date', [now()->startOfWeek(), now()->endOfWeek()]))
                     ->indicator('ئەم هەفتەیە'),
 
-                // فلتەری ئەم مانگە
                 Filter::make('this_month')
                     ->label('مامەڵەکانی ئەم مانگە')
                     ->toggle()
-                    ->query(fn ($query) => $query->whereMonth('transaction_date', now()->month)
-                        ->whereYear('transaction_date', now()->year))
+                    ->query(fn ($query) => $query->whereMonth('transaction_date', now()->month)->whereYear('transaction_date', now()->year))
                     ->indicator('ئەم مانگە'),
 
-                // فلتەری ئەمساڵ
                 Filter::make('this_year')
                     ->label('مامەڵەکانی ئەمساڵ')
                     ->toggle()
                     ->query(fn ($query) => $query->whereYear('transaction_date', now()->year))
                     ->indicator('ئەمساڵ'),
 
-                // فلتەری تێبینی
                 TernaryFilter::make('has_description')
                     ->label('وەسف')
                     ->placeholder('هەموو')
                     ->trueLabel('وەسفی هەیە')
                     ->falseLabel('وەسفی نییە')
                     ->queries(
-                        true: fn ($query) => $query->whereNotNull('description'),
+                        true:  fn ($query) => $query->whereNotNull('description'),
                         false: fn ($query) => $query->whereNull('description'),
                     )
                     ->indicator('وەسف'),
             ])
 
-            // ڕێکخستنی فلتەرەکان
             ->filtersLayout(FiltersLayout::Modal)
             ->filtersFormColumns(2)
             ->filtersFormWidth('lg')
             ->persistFiltersInSession()
 
-            // دوگمەی فلتەر
             ->filtersTriggerAction(
                 fn ($action) => $action
                     ->button()
@@ -475,9 +412,7 @@ class TransactionResource extends Resource
                     ->color('info'),
             ])
 
-            ->bulkActions([
-                // هیچ bulk actionـێک نییە چونکە مامەڵەکان نابێت بسڕدرێنەوە
-            ])
+            ->bulkActions([])
 
             ->emptyStateIcon('heroicon-o-arrow-path')
             ->emptyStateHeading('هیچ مامەڵەیەک تۆمار نەکراوە')
@@ -490,18 +425,16 @@ class TransactionResource extends Resource
 
     public static function getRelations(): array
     {
-        return [
-            //
-        ];
+        return [];
     }
 
-public static function getPages(): array
-{
-    return [
-        'index' => Pages\ListTransactions::route('/'),
-        'view' => Pages\ViewTransaction::route('/{record}'),
-    ];
-}
+    public static function getPages(): array
+    {
+        return [
+            'index' => Pages\ListTransactions::route('/'),
+            'view'  => Pages\ViewTransaction::route('/{record}'),
+        ];
+    }
 
     public static function getGloballySearchableAttributes(): array
     {
@@ -519,4 +452,3 @@ public static function getPages(): array
         return 'success';
     }
 }
-
