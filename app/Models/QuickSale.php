@@ -189,12 +189,18 @@ class QuickSale extends Model
             $initialVal = floatval($initial[$catId] ?? 0);
             $finalVal   = floatval($final[$catId]   ?? 0);
 
-            // *** دابەشکردن بەسەر ٢ ***
-            $soldVal = ($initialVal - $finalVal) / 2;
+            $fullDiff = $initialVal - $finalVal;
 
-            $sold[$catId]  = $soldVal;
-            $totalAmount  += $soldVal * floatval($category->current_price);
-            $totalLiters  += $soldVal;
+            // *** لیتری کۆگا = جیاوازی ÷ 2 ***
+            // *** پارە = جیاوازی × نرخ (بەبێ دابەش) ***
+            $soldLitersForStock = $fullDiff / 2;
+            $soldAmountFull     = $fullDiff * floatval($category->current_price);
+
+            // sold_data لیتری ÷2 ذەخیرە دەکات (بۆ کەمکردنەوەی کۆگا)
+            // بەڵام total_amount بەپێی جیاوازی تەواو حساب دەکرێت
+            $sold[$catId]  = $soldLitersForStock;
+            $totalAmount  += $soldAmountFull;
+            $totalLiters  += $soldLitersForStock;
         }
 
         // تەنها لە model دەنووسێت — DB save لە applyDifferencesToStockAndCash() دەکرێت
@@ -345,7 +351,8 @@ class QuickSale extends Model
                 }
 
                 $pricePerLiter = floatval($category->current_price);
-                $totalPrice    = $soldLiters * $pricePerLiter;
+                // پارە = (لیتر × 2) × نرخ — چونکە sold_data پێشتر ÷2 کرابوو
+                $totalPrice    = ($soldLiters * 2) * $pricePerLiter;
 
                 // بررسی کۆگا ڕاستەوخۆ لە DB
                 $currentStock = floatval(
