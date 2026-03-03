@@ -18,6 +18,7 @@ use Illuminate\Support\HtmlString;
 use Illuminate\Support\Facades\Auth;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Enums\FiltersLayout;
 use Filament\Forms\Components\DatePicker;
 use Illuminate\Database\Eloquent\Builder;
@@ -801,8 +802,8 @@ class QuickSaleResource extends Resource
             ->filters([
 
                 // فلتەری مەودای بەرواری فرۆشتن
-                Filter::make('sale_date_range')
-                    ->label('مەودای بەرواری فرۆشتن')
+                Filter::make('sale_date')
+                    ->label('مەودای بەروار')
                     ->form([
                         DatePicker::make('from')
                             ->label('لە ڕێکەوتی')
@@ -868,6 +869,47 @@ class QuickSaleResource extends Resource
                     ->preload()
                     ->indicator('ڕەوشت')
                     ->placeholder('هەموو ڕەوشتەکان')
+                    ->columnSpan(1),
+
+                // فلتەری کڕینی ئەمڕۆ
+                Filter::make('today')
+                    ->label('ئەمڕۆ')
+                    ->toggle()
+                    ->query(fn ($query) => $query->whereDate('sale_date', today()))
+                    ->indicator('ئەمڕۆ')
+                    ->columnSpan(1),
+
+                // فلتەری کڕینی دوێنێ
+                Filter::make('yesterday')
+                    ->label('دوێنێ')
+                    ->toggle()
+                    ->query(fn ($query) => $query->whereDate('sale_date', today()->subDay()))
+                    ->indicator('دوێنێ')
+                    ->columnSpan(1),
+
+                // فلتەری کڕینی ئەم هەفتەیە
+                Filter::make('this_week')
+                    ->label('ئەم هەفتەیە')
+                    ->toggle()
+                    ->query(fn ($query) => $query->whereBetween('sale_date', [now()->startOfWeek(), now()->endOfWeek()]))
+                    ->indicator('ئەم هەفتەیە')
+                    ->columnSpan(1),
+
+                // فلتەری کڕینی ئەم مانگە
+                Filter::make('this_month')
+                    ->label('ئەم مانگە')
+                    ->toggle()
+                    ->query(fn ($query) => $query->whereMonth('sale_date', now()->month)
+                        ->whereYear('sale_date', now()->year))
+                    ->indicator('ئەم مانگە')
+                    ->columnSpan(1),
+
+                // فلتەری کڕینی ئەمساڵ
+                Filter::make('this_year')
+                    ->label('ئەمساڵ')
+                    ->toggle()
+                    ->query(fn ($query) => $query->whereYear('sale_date', now()->year))
+                    ->indicator('ئەمساڵ')
                     ->columnSpan(1),
 
                 // فلتەری مەودای کۆی گشتی (دینار)
@@ -959,7 +1001,7 @@ class QuickSaleResource extends Resource
                     ->columnSpan(1),
 
                 // فلتەری مەودای کاتی تۆمارکردن
-                Filter::make('created_at_range')
+                Filter::make('created_at')
                     ->label('مەودای تۆمارکردن')
                     ->form([
                         DatePicker::make('from_created')
@@ -998,64 +1040,127 @@ class QuickSaleResource extends Resource
                     ->columns(2)
                     ->columnSpan(2),
 
-                // فلتەری ئەمڕۆ
-                Filter::make('today')
-                    ->label('ئەمڕۆ')
-                    ->toggle()
-                    ->query(fn ($query) => $query->whereDate('sale_date', today()))
-                    ->indicator('ئەمڕۆ')
-                    ->columnSpan(1),
-
-                // فلتەری دوێنێ
-                Filter::make('yesterday')
-                    ->label('دوێنێ')
-                    ->toggle()
-                    ->query(fn ($query) => $query->whereDate('sale_date', today()->subDay()))
-                    ->indicator('دوێنێ')
-                    ->columnSpan(1),
-
-                // فلتەری ئەم هەفتەیە
-                Filter::make('this_week')
-                    ->label('ئەم هەفتەیە')
-                    ->toggle()
-                    ->query(fn ($query) => $query->whereBetween('sale_date', [now()->startOfWeek(), now()->endOfWeek()]))
-                    ->indicator('ئەم هەفتەیە')
-                    ->columnSpan(1),
-
-                // فلتەری ئەم مانگە
-                Filter::make('this_month')
-                    ->label('ئەم مانگە')
-                    ->toggle()
-                    ->query(fn ($query) => $query->whereMonth('sale_date', now()->month)
-                        ->whereYear('sale_date', now()->year))
-                    ->indicator('ئەم مانگە')
-                    ->columnSpan(1),
-
-                // فلتەری ئەمساڵ
-                Filter::make('this_year')
-                    ->label('ئەمساڵ')
-                    ->toggle()
-                    ->query(fn ($query) => $query->whereYear('sale_date', now()->year))
-                    ->indicator('ئەمساڵ')
-                    ->columnSpan(1),
-
             ])
 
             // ڕێکخستنی فلتەرەکان (وەک FuelPurchaseResource)
-            ->filtersLayout(FiltersLayout::AboveContentCollapsible)
-            ->filtersFormColumns(3)
+            ->filtersLayout(FiltersLayout::AboveContentCollapsible) // گۆڕدرا بۆ AboveContentCollapsible بۆ ڕێکخستنی باشتر
+            ->filtersFormColumns(3) // ٣ ستوون بۆ ڕێکخستنی باشتر
             ->filtersFormWidth('full')
             ->persistFiltersInSession()
             ->deferFilters()
             ->filtersFormMaxHeight('500px')
 
-            // ========== هێدەری پوختە (بە پەیوەندی بە فلتەرەکانەوە) ==========
             ->header(function () {
-                // ئەمەش بەشێکە کە دەبێت لە Model زیاد بکەیت
-                // بەڵام ئێستا بە شێوەیەکی کاتی ڕاستی دەکەین
-                return new HtmlString(view('filament.resources.quick-sale-header', [
-                    'totals' => self::getFilteredTotals(),
-                ])->render());
+                $totals = QuickSale::getTotalsByDate(static::getTodayDate());
+
+                if (!$totals) {
+                    return null;
+                }
+
+                return new HtmlString('
+                    <div class="bg-gray-900 text-white rounded-xl p-4 mb-4 border border-gray-700 shadow-lg">
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="flex items-center gap-2">
+                                <span class="bg-gray-800 text-white p-2 rounded-lg">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.012M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                                    </svg>
+                                </span>
+                                <h3 class="text-lg font-bold text-white">پوختەی گشتی فرۆشتن</h3>
+                            </div>
+                            <span class="text-sm text-gray-400">' . static::getTodayDateDisplay() . '</span>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <!-- کۆی گشتی بەیانی -->
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-700 hover:border-yellow-500 transition-all hover:shadow-xl">
+                                <div class="flex items-center justify-between mb-2">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-2xl">🌅</span>
+                                        <span class="font-bold text-yellow-400">شەفتی بەیانی</span>
+                                    </div>
+                                    <span class="bg-gray-700 text-yellow-400 text-xs font-medium px-2.5 py-0.5 rounded-full border border-yellow-500">
+                                        ' . $totals['morning']['count'] . ' شەفت
+                                    </span>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 mt-3">
+                                    <div class="bg-gray-700 bg-opacity-50 rounded p-2">
+                                        <span class="text-xs text-gray-400 block">کۆی لیتر</span>
+                                        <span class="text-yellow-400 font-bold text-sm">' . number_format($totals['morning']['total_liters']) . ' لیتر</span>
+                                    </div>
+                                    <div class="bg-gray-700 bg-opacity-50 rounded p-2">
+                                        <span class="text-xs text-gray-400 block">کۆی دینار</span>
+                                        <span class="text-yellow-400 font-bold text-sm">' . number_format($totals['morning']['total_amount']) . ' د.ع</span>
+                                    </div>
+                                </div>
+                                <div class="mt-2 pt-2 border-t border-gray-700">
+                                    <div class="flex justify-between text-xs">
+                                        <span class="text-gray-400">تێکڕا:</span>
+                                        <span class="font-bold text-yellow-400">' . number_format($totals['morning']['total_amount'] / max(1, $totals['morning']['count'])) . ' د.ع</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- کۆی گشتی ئێوارە -->
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-700 hover:border-indigo-500 transition-all hover:shadow-xl">
+                                <div class="flex items-center justify-between mb-2">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-2xl">🌙</span>
+                                        <span class="font-bold text-indigo-400">شەفتی ئێوارە</span>
+                                    </div>
+                                    <span class="bg-gray-700 text-indigo-400 text-xs font-medium px-2.5 py-0.5 rounded-full border border-indigo-500">
+                                        ' . $totals['evening']['count'] . ' شەفت
+                                    </span>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 mt-3">
+                                    <div class="bg-gray-700 bg-opacity-50 rounded p-2">
+                                        <span class="text-xs text-gray-400 block">کۆی لیتر</span>
+                                        <span class="text-indigo-400 font-bold text-sm">' . number_format($totals['evening']['total_liters']) . ' لیتر</span>
+                                    </div>
+                                    <div class="bg-gray-700 bg-opacity-50 rounded p-2">
+                                        <span class="text-xs text-gray-400 block">کۆی دینار</span>
+                                        <span class="text-indigo-400 font-bold text-sm">' . number_format($totals['evening']['total_amount']) . ' د.ع</span>
+                                    </div>
+                                </div>
+                                <div class="mt-2 pt-2 border-t border-gray-700">
+                                    <div class="flex justify-between text-xs">
+                                        <span class="text-gray-400">تێکڕا:</span>
+                                        <span class="font-bold text-indigo-400">' . number_format($totals['evening']['total_amount'] / max(1, $totals['evening']['count'])) . ' د.ع</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- کۆی گشتی هەردوو شەفت -->
+                            <div class="bg-gray-800 rounded-lg p-4 border border-gray-700 hover:border-green-500 transition-all hover:shadow-xl">
+                                <div class="flex items-center justify-between mb-2">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-2xl">📊</span>
+                                        <span class="font-bold text-green-400">کۆی گشتی</span>
+                                    </div>
+                                    <span class="bg-gray-700 text-green-400 text-xs font-medium px-2.5 py-0.5 rounded-full border border-green-500">
+                                        ' . ($totals['morning']['count'] + $totals['evening']['count']) . ' شەفت
+                                    </span>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 mt-3">
+                                    <div class="bg-gray-700 bg-opacity-50 rounded p-2">
+                                        <span class="text-xs text-gray-400 block">کۆی گشتی لیتر</span>
+                                        <span class="text-green-400 font-bold text-sm">' . number_format($totals['morning']['total_liters'] + $totals['evening']['total_liters']) . ' لیتر</span>
+                                    </div>
+                                    <div class="bg-gray-700 bg-opacity-50 rounded p-2">
+                                        <span class="text-xs text-gray-400 block">کۆی گشتی دینار</span>
+                                        <span class="text-green-400 font-bold text-sm">' . number_format($totals['morning']['total_amount'] + $totals['evening']['total_amount']) . ' د.ع</span>
+                                    </div>
+                                </div>
+                                <div class="mt-2 pt-2 border-t border-gray-700">
+                                    <div class="flex justify-between text-xs">
+                                        <span class="text-gray-400">تێکڕای لیتر:</span>
+                                        <span class="font-bold text-green-400">' . number_format(($totals['morning']['total_liters'] + $totals['evening']['total_liters']) / max(1, ($totals['morning']['count'] + $totals['evening']['count']))) . ' لیتر/شەفت</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ');
             })
 
             ->actions([
@@ -1131,130 +1236,6 @@ class QuickSaleResource extends Resource
             ->defaultSort('sale_date', 'desc')
             ->striped()
             ->poll('30s');
-    }
-
-    /**
-     * ئەم فەنکشنە کۆی گشتی فلتەرکراوەکان دەگەڕێنێتەوە
-     */
-    protected static function getFilteredTotals(): array
-    {
-        // ئەمەش بۆ ئەوەیە کە فلتەرەکان لە سێشنەوە وەربگرێت
-        // بەڵام باشترە لە QuickSale Modelدا بنووسرێت
-
-        $query = QuickSale::query();
-
-        // وەرگرتنی فلتەرەکان لە URL
-        $filters = request()->all();
-
-        // جێبەجێکردنی فلتەری بەروار
-        if (isset($filters['tableFilters']['sale_date_range'])) {
-            $dateFilter = $filters['tableFilters']['sale_date_range'];
-
-            if (isset($dateFilter['from']) && !empty($dateFilter['from'])) {
-                $query->whereDate('sale_date', '>=', $dateFilter['from']);
-            }
-
-            if (isset($dateFilter['until']) && !empty($dateFilter['until'])) {
-                $query->whereDate('sale_date', '<=', $dateFilter['until']);
-            }
-        }
-
-        // جێبەجێکردنی فلتەری شەفت
-        if (isset($filters['tableFilters']['shift']['values']) && !empty($filters['tableFilters']['shift']['values'])) {
-            $query->whereIn('shift', $filters['tableFilters']['shift']['values']);
-        }
-
-        // جێبەجێکردنی فلتەری ڕەوشت
-        if (isset($filters['tableFilters']['status']['values']) && !empty($filters['tableFilters']['status']['values'])) {
-            $query->whereIn('status', $filters['tableFilters']['status']['values']);
-        }
-
-        // جێبەجێکردنی فلتەری کۆی گشتی
-        if (isset($filters['tableFilters']['total_amount_range'])) {
-            $amountFilter = $filters['tableFilters']['total_amount_range'];
-
-            if (isset($amountFilter['min_amount']) && !empty($amountFilter['min_amount'])) {
-                $query->where('total_amount', '>=', $amountFilter['min_amount']);
-            }
-
-            if (isset($amountFilter['max_amount']) && !empty($amountFilter['max_amount'])) {
-                $query->where('total_amount', '<=', $amountFilter['max_amount']);
-            }
-        }
-
-        // جێبەجێکردنی فلتەری کۆی لیتر
-        if (isset($filters['tableFilters']['total_liters_range'])) {
-            $litersFilter = $filters['tableFilters']['total_liters_range'];
-
-            if (isset($litersFilter['min_liters']) && !empty($litersFilter['min_liters'])) {
-                $query->where('total_liters', '>=', $litersFilter['min_liters']);
-            }
-
-            if (isset($litersFilter['max_liters']) && !empty($litersFilter['max_liters'])) {
-                $query->where('total_liters', '<=', $litersFilter['max_liters']);
-            }
-        }
-
-        // جێبەجێکردنی فلتەری بەکارهێنەر
-        if (isset($filters['tableFilters']['created_by']['values']) && !empty($filters['tableFilters']['created_by']['values'])) {
-            $query->whereIn('created_by', $filters['tableFilters']['created_by']['values']);
-        }
-
-        // جێبەجێکردنی فلتەری کاتی تۆمارکردن
-        if (isset($filters['tableFilters']['created_at_range'])) {
-            $createdFilter = $filters['tableFilters']['created_at_range'];
-
-            if (isset($createdFilter['from_created']) && !empty($createdFilter['from_created'])) {
-                $query->whereDate('created_at', '>=', $createdFilter['from_created']);
-            }
-
-            if (isset($createdFilter['until_created']) && !empty($createdFilter['until_created'])) {
-                $query->whereDate('created_at', '<=', $createdFilter['until_created']);
-            }
-        }
-
-        // جێبەجێکردنی فلتەری ئەمڕۆ
-        if (isset($filters['tableFilters']['today']['isActive']) && $filters['tableFilters']['today']['isActive']) {
-            $query->whereDate('sale_date', today());
-        }
-
-        // جێبەجێکردنی فلتەری دوێنێ
-        if (isset($filters['tableFilters']['yesterday']['isActive']) && $filters['tableFilters']['yesterday']['isActive']) {
-            $query->whereDate('sale_date', today()->subDay());
-        }
-
-        // جێبەجێکردنی فلتەری ئەم هەفتەیە
-        if (isset($filters['tableFilters']['this_week']['isActive']) && $filters['tableFilters']['this_week']['isActive']) {
-            $query->whereBetween('sale_date', [now()->startOfWeek(), now()->endOfWeek()]);
-        }
-
-        // جێبەجێکردنی فلتەری ئەم مانگە
-        if (isset($filters['tableFilters']['this_month']['isActive']) && $filters['tableFilters']['this_month']['isActive']) {
-            $query->whereMonth('sale_date', now()->month)
-                  ->whereYear('sale_date', now()->year);
-        }
-
-        // جێبەجێکردنی فلتەری ئەمساڵ
-        if (isset($filters['tableFilters']['this_year']['isActive']) && $filters['tableFilters']['this_year']['isActive']) {
-            $query->whereYear('sale_date', now()->year);
-        }
-
-        // کۆکردنەوەی بەپێی شەفت
-        $morningTotals = (clone $query)->where('shift', 'morning')->get();
-        $eveningTotals = (clone $query)->where('shift', 'evening')->get();
-
-        return [
-            'morning' => [
-                'count' => $morningTotals->count(),
-                'total_liters' => $morningTotals->sum('total_liters'),
-                'total_amount' => $morningTotals->sum('total_amount'),
-            ],
-            'evening' => [
-                'count' => $eveningTotals->count(),
-                'total_liters' => $eveningTotals->sum('total_liters'),
-                'total_amount' => $eveningTotals->sum('total_amount'),
-            ],
-        ];
     }
 
     public static function getPages(): array
