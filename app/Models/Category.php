@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Log;
 
 class Category extends Model
 {
@@ -41,19 +42,21 @@ class Category extends Model
 
     public function updateStock($liters, $type = 'add')
     {
+        $oldStock = $this->stock_liters;
+
         if ($type === 'add') {
             $this->stock_liters += $liters;
         } else {
             $this->stock_liters -= $liters;
         }
+
         $this->save();
+
+        Log::info("کۆگا - {$this->name}: " . ($type === 'add' ? 'زیادکردن' : 'کەمکردنەوە') . " {$liters} لیتر, کۆن: {$oldStock}, نوێ: {$this->stock_liters}");
 
         return $this;
     }
 
-    /**
-     * وەرگرتنی جۆری بەرهەم بە شێوازی ڕاستەوخۆ
-     */
     public function getTypeNameAttribute()
     {
         return $this->type?->name ?? 'نەدیاریکراو';

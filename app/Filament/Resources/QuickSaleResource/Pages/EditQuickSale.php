@@ -30,12 +30,10 @@ class EditQuickSale extends EditRecord
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
-        // دیاریکردنی بەروار ئەگەر دیاری نەکرابێت
         if (!isset($data['sale_date']) || empty($data['sale_date'])) {
             $data['sale_date'] = Carbon::now()->format('Y-m-d');
         }
 
-        // دووبارە حسابکردنی total_liters و total_amount
         $totalAmount = 0;
         $totalLiters = 0;
         $categories = Category::all();
@@ -61,21 +59,16 @@ class EditQuickSale extends EditRecord
         try {
             DB::beginTransaction();
 
-            // جێبەجێکردنی جیاوازیەکان بۆ ئەم شەفتە
             $result = $this->record->applyDifferencesToStockAndCash();
 
-            // ئەگەر ئەم شەفتە بەیانی بێت و داخرابێت، شەفتی ئێوارەی هەمان ڕۆژ نوێ بکەوە
             if ($this->record->shift === 'morning' && $this->record->status === 'closed') {
                 $eveningShift = QuickSale::whereDate('sale_date', $this->record->sale_date)
                     ->where('shift', 'evening')
                     ->first();
 
                 if ($eveningShift && $eveningShift->status === 'open') {
-                    // تەنها خوێندنەوەی سەرەتایی شەفتی ئێوارە نوێ بکەوە
                     $eveningShift->initial_readings = $this->record->final_readings;
                     $eveningShift->save();
-
-                    // دووبارە حسابکردنی شەفتی ئێوارە
                     $eveningShift->applyDifferencesToStockAndCash();
 
                     Notification::make()
@@ -88,7 +81,6 @@ class EditQuickSale extends EditRecord
 
             DB::commit();
 
-            // نیشاندانی ئاگاداری
             $this->showNotification($result);
 
         } catch (\Exception $e) {
@@ -103,9 +95,6 @@ class EditQuickSale extends EditRecord
         }
     }
 
-    /**
-     * نیشاندانی ئاگاداری
-     */
     protected function showNotification($result)
     {
         if ($result['applied'] && isset($result['message'])) {

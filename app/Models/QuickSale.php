@@ -187,69 +187,60 @@ class QuickSale extends Model
     }
 
     /**
-     * ئەم فەنکشنە پێش سڕینەوەی مامەڵەکانی پێشوو،
-     * کۆگاکەی دووبارە دەکاتەوە (reverse) بۆ ئەوەی
-     * stock دووجار کەم نەبێت.
+     * گەڕاندنەوەی مامەڵەکانی پێشوو بۆ کۆگا و قاسە
      */
-    protected function reverseStockForPreviousTransactions()
+    protected function revertPreviousTransactions()
     {
-        // وەرگرتنی هەموو transactions ی پێشووی ئەم quick sale
+        // وەرگرتنی هەموو فرۆشتنەکانی پێشووی ئەم شەفتە
+        $previousSales = Sale::where('notes', 'LIKE', "%شەفتی {$this->shift_name}%")
+            ->whereDate('sale_date', $this->sale_date)
+            ->get();
+
+        if ($previousSales->isEmpty()) {
+            Log::info("هیچ فرۆشتنێکی پێشوو نییە بۆ ئەم شەفتە");
+            return;
+        }
+
+        // گەڕاندنەوەی کۆگا بۆ بڕەکانی پێشوو
+        foreach ($previousSales as $sale) {
+            $category = Category::find($sale->category_id);
+            if ($category) {
+                // زیادکردنەوەی ئەو بڕانەی پێشتر کەم کرابوون
+                $category->updateStock($sale->liters, 'add');
+                Log::info("گەڕاندنەوەی کۆگا - {$category->name}: +{$sale->liters} لیتر");
+            }
+        }
+
+        // گەڕاندنەوەی قاسە
         $previousTransactions = Transaction::where('reference_number', $this->id)
             ->where('type', 'quick_sale_difference')
             ->get();
 
-        if ($previousTransactions->isEmpty()) {
-            Log::info("هیچ transaction ی پێشوو نییە بۆ QuickSale ID: {$this->id}");
-            return;
-        }
-
-        $categories = Category::all()->keyBy('id');
-
-        // وەرگرتنی sales ی پێشووی ئەم quick sale بەپێی transaction
-        foreach ($previousTransactions as $transaction) {
-            if ($transaction->transactionable_type === Sale::class && $transaction->transactionable_id) {
-                $sale = Sale::find($transaction->transactionable_id);
-                if ($sale) {
-                    $category = $categories[$sale->category_id] ?? null;
-                    if ($category) {
-                        // دووبارەکردنەوەی کۆگا (reverse) - زیادکردنەوەی ئەوەی کەمکرابوو
-                        $category->updateStock($sale->liters, 'add');
-                        Log::info("دووبارەکردنەوەی کۆگای {$category->name}: +{$sale->liters} لیتر");
-                    }
-                }
-            }
-
-            // دووبارەکردنەوەی قاسە (reverse)
-            $cash = Cash::first();
-            if ($cash) {
+        $cash = Cash::first();
+        if ($cash && $previousTransactions->isNotEmpty()) {
+            foreach ($previousTransactions as $transaction) {
                 $cash->balance -= $transaction->amount;
                 $cash->total_income -= $transaction->amount;
-                $cash->last_update = now();
-                $cash->save();
-                Log::info("دووبارەکردنەوەی قاسە: -{$transaction->amount} دینار");
+                Log::info("گەڕاندنەوەی قاسە: -{$transaction->amount} دینار");
             }
+            $cash->last_update = now();
+            $cash->save();
         }
 
-        // ئێستا sales و transactions ی پێشوو بسڕەوە
-        $saleIds = $previousTransactions
-            ->filter(fn($t) => $t->transactionable_type === Sale::class && $t->transactionable_id)
-            ->pluck('transactionable_id')
-            ->toArray();
-
-        if (!empty($saleIds)) {
-            Sale::whereIn('id', $saleIds)->delete();
-        }
+        // سڕینەوەی فرۆشتن و مامەڵەکانی پێشوو
+        Sale::where('notes', 'LIKE', "%شەفتی {$this->shift_name}%")
+            ->whereDate('sale_date', $this->sale_date)
+            ->delete();
 
         Transaction::where('reference_number', $this->id)
             ->where('type', 'quick_sale_difference')
             ->delete();
 
-        Log::info("سڕایەوە: " . count($saleIds) . " sale و " . $previousTransactions->count() . " transaction بۆ QuickSale ID: {$this->id}");
+        Log::info("مامەڵەکانی پێشوو سڕانەوە بۆ شەفتی {$this->shift_name}");
     }
 
     /**
      * جێبەجێکردنی جیاوازیەکان بۆ کۆگا و قاسە
-     * *** چارەسەرکراو: ئێستا پێش جێبەجێکردن، دووبارەکردنەوەی کۆگا (reverse) دەکات ***
      */
     public function applyDifferencesToStockAndCash()
     {
@@ -265,23 +256,22 @@ class QuickSale extends Model
             ];
         }
 
-        $categories = Category::all()->keyBy('id');
-        $results = [
-            'positive' => [],
-            'negative' => [],
-            'total_positive_amount' => 0,
-            'total_negative_amount' => 0,
-            'total_positive_liters' => 0,
-            'total_negative_liters' => 0,
-            'details' => []
-        ];
-
         DB::beginTransaction();
 
         try {
-            // *** چارەسەر: پێش هەموو شتێک، مامەڵەکانی پێشوو دووبارەبکەرەوە ***
-            // ئەمە دڵنیای دەدات کە کۆگا دووجار کەم نەبێت
-            $this->reverseStockForPreviousTransactions();
+            // *** گەڕاندنەوەی مامەڵەکانی پێشوو ***
+            $this->revertPreviousTransactions();
+
+            $categories = Category::all()->keyBy('id');
+            $results = [
+                'positive' => [],
+                'negative' => [],
+                'total_positive_amount' => 0,
+                'total_negative_amount' => 0,
+                'total_positive_liters' => 0,
+                'total_negative_liters' => 0,
+                'details' => []
+            ];
 
             foreach ($differences as $catId => $diff) {
                 if (abs($diff) < 0.01) continue;
@@ -289,21 +279,25 @@ class QuickSale extends Model
                 $category = $categories[$catId] ?? null;
                 if (!$category) continue;
 
-                // دووبارەخوێندنەوەی category لە DB بۆ ئەوەی stock نوێترین بەها بێت
+                // دووبارەخوێندنەوەی کاتیگۆری بۆ بەدەستهێنانی نوێترین بڕی کۆگا
                 $category->refresh();
 
                 $pricePerLiter = $category->current_price;
-                $totalPrice = abs($diff) * $pricePerLiter;
+                $totalPrice = $diff * $pricePerLiter; // بڕی ڕاستەقینە
 
                 if ($diff > 0) {
                     // جیاوازی ئەرێنی (فرۆشراوی تۆ زیاترە)
+
+                    // پێش کەمکردنەوە، دڵنیابە کە بڕی پێویست لە کۆگا هەیە
                     if ($category->stock_liters < $diff) {
                         throw new \Exception("بڕی پێویست لە کۆگای {$category->name}دا نییە. بڕی ماوە: {$category->stock_liters} لیتر، پێویستە: {$diff} لیتر");
                     }
 
+                    // کەمکردنەوە لە کۆگا
                     $category->updateStock($diff, 'subtract');
-                    Log::info("کەمکردنەوە لە کۆگای {$category->name}: {$diff} لیتر - کۆگای نوێ: {$category->stock_liters} لیتر");
+                    Log::info("کەمکردنەوە لە کۆگای {$category->name}: {$diff} لیتر");
 
+                    // زیادکردنی پارە بۆ قاسە
                     $this->addMoneyToCash($totalPrice, $category, $diff);
 
                     $results['positive'][] = [
@@ -327,23 +321,26 @@ class QuickSale extends Model
 
                 } else {
                     // جیاوازی نەرێنی (فرۆشراوی تۆ کەمترە)
+                    $absDiff = abs($diff);
+                    $totalPrice = $absDiff * $pricePerLiter;
+
                     $results['negative'][] = [
                         'category' => $category->name,
-                        'liters' => abs($diff),
+                        'liters' => $absDiff,
                         'price' => $totalPrice,
                         'price_per_liter' => $pricePerLiter
                     ];
                     $results['total_negative_amount'] += $totalPrice;
-                    $results['total_negative_liters'] += abs($diff);
+                    $results['total_negative_liters'] += $absDiff;
 
                     $results['details'][] = [
                         'type' => 'negative',
                         'category_id' => $catId,
                         'category_name' => $category->name,
-                        'liters' => abs($diff),
+                        'liters' => $absDiff,
                         'price_per_liter' => $pricePerLiter,
                         'total_price' => $totalPrice,
-                        'message' => "⚠️ {$category->name}: " . abs($diff) . " لیتر کەمتر فرۆشراوە، لە کۆگا دەمێنێتەوە"
+                        'message' => "⚠️ {$category->name}: {$absDiff} لیتر کەمتر فرۆشراوە، لە کۆگا دەمێنێتەوە"
                     ];
                 }
             }
