@@ -147,6 +147,67 @@ class QuickSale extends Model
     }
 
     /**
+     * حسابکردنی فرۆشراوەکان لەسەر بنەمای خوێندنەوەکان
+     */
+    public function calculateSoldFromReadings()
+    {
+        $initial = $this->initial_readings ?? [];
+        $final = $this->final_readings ?? [];
+        $sold = [];
+        $totalAmount = 0;
+        $totalLiters = 0;
+
+        $categories = Category::all();
+
+        foreach ($categories as $category) {
+            $catId = $category->id;
+            $initialVal = floatval($initial[$catId] ?? 0);
+            $finalVal = floatval($final[$catId] ?? 0);
+
+            $soldVal = $initialVal - $finalVal;
+            $sold[$catId] = $soldVal;
+            $totalAmount += $soldVal * $category->current_price;
+            $totalLiters += $soldVal;
+        }
+
+        $this->sold_data = $sold;
+        $this->total_amount = $totalAmount;
+        $this->total_liters = $totalLiters;
+        $this->saveQuietly();
+
+        return [
+            'sold' => $sold,
+            'total_amount' => $totalAmount,
+            'total_liters' => $totalLiters,
+        ];
+    }
+
+    /**
+     * حسابکردنی جیاوازی لەگەڵ فرۆشراوەکانی تۆ
+     */
+    public function calculateDifferences()
+    {
+        $sold = $this->sold_data ?? [];
+        $reported = $this->reported_sold ?? [];
+        $differences = [];
+
+        $categories = Category::all();
+
+        foreach ($categories as $category) {
+            $catId = $category->id;
+            $soldVal = floatval($sold[$catId] ?? 0);
+            $reportedVal = floatval($reported[$catId] ?? $soldVal);
+
+            $differences[$catId] = $reportedVal - $soldVal;
+        }
+
+        $this->differences = $differences;
+        $this->saveQuietly();
+
+        return $differences;
+    }
+
+    /**
      * جێبەجێکردنی جیاوازیەکان بۆ کۆگا و قاسە (ئەمە هەموو شتێک دەکات)
      */
     public function applyDifferencesToStockAndCash()
@@ -276,67 +337,6 @@ class QuickSale extends Model
                 'details' => []
             ];
         }
-    }
-
-    /**
-     * حسابکردنی فرۆشراوەکان لەسەر بنەمای خوێندنەوەکان
-     */
-    public function calculateSoldFromReadings()
-    {
-        $initial = $this->initial_readings ?? [];
-        $final = $this->final_readings ?? [];
-        $sold = [];
-        $totalAmount = 0;
-        $totalLiters = 0;
-
-        $categories = Category::all();
-
-        foreach ($categories as $category) {
-            $catId = $category->id;
-            $initialVal = floatval($initial[$catId] ?? 0);
-            $finalVal = floatval($final[$catId] ?? 0);
-
-            $soldVal = $initialVal - $finalVal;
-            $sold[$catId] = $soldVal;
-            $totalAmount += $soldVal * $category->current_price;
-            $totalLiters += $soldVal;
-        }
-
-        $this->sold_data = $sold;
-        $this->total_amount = $totalAmount;
-        $this->total_liters = $totalLiters;
-        $this->saveQuietly();
-
-        return [
-            'sold' => $sold,
-            'total_amount' => $totalAmount,
-            'total_liters' => $totalLiters,
-        ];
-    }
-
-    /**
-     * حسابکردنی جیاوازی لەگەڵ فرۆشراوەکانی تۆ
-     */
-    public function calculateDifferences()
-    {
-        $sold = $this->sold_data ?? [];
-        $reported = $this->reported_sold ?? [];
-        $differences = [];
-
-        $categories = Category::all();
-
-        foreach ($categories as $category) {
-            $catId = $category->id;
-            $soldVal = floatval($sold[$catId] ?? 0);
-            $reportedVal = floatval($reported[$catId] ?? $soldVal);
-
-            $differences[$catId] = $reportedVal - $soldVal;
-        }
-
-        $this->differences = $differences;
-        $this->saveQuietly();
-
-        return $differences;
     }
 
     /**

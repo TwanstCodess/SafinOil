@@ -61,21 +61,21 @@ class EditQuickSale extends EditRecord
         try {
             DB::beginTransaction();
 
-            // تەنها یەک جار هەموو شتەکان حساب بکە (لەناو Modelدا هەمووی دەکات)
+            // جێبەجێکردنی جیاوازیەکان بۆ ئەم شەفتە
             $result = $this->record->applyDifferencesToStockAndCash();
 
-            // ئەگەر ئەم شەفتە بەیانی بێت و داخرابێت، شەفتی ئێوارەی هەمان ڕۆژ دەستکاری بکە
+            // ئەگەر ئەم شەفتە بەیانی بێت و داخرابێت، شەفتی ئێوارەی هەمان ڕۆژ نوێ بکەوە
             if ($this->record->shift === 'morning' && $this->record->status === 'closed') {
                 $eveningShift = QuickSale::whereDate('sale_date', $this->record->sale_date)
                     ->where('shift', 'evening')
                     ->first();
 
                 if ($eveningShift && $eveningShift->status === 'open') {
-                    $eveningShift->update([
-                        'initial_readings' => $this->record->final_readings
-                    ]);
+                    // تەنها خوێندنەوەی سەرەتایی شەفتی ئێوارە نوێ بکەوە
+                    $eveningShift->initial_readings = $this->record->final_readings;
+                    $eveningShift->save();
 
-                    // هەموو حسابەکانی شەفتی ئێوارە یەک جار
+                    // دووبارە حسابکردنی شەفتی ئێوارە
                     $eveningShift->applyDifferencesToStockAndCash();
 
                     Notification::make()
