@@ -168,6 +168,8 @@ class QuickSale extends Model
             $sold[$catId] = $soldVal;
             $totalAmount += $soldVal * $category->current_price;
             $totalLiters += $soldVal;
+
+            Log::info("حسابکردنی فرۆشراو - {$category->name}: سەرەتایی {$initialVal}, کۆتایی {$finalVal}, فرۆشراو {$soldVal}");
         }
 
         $this->sold_data = $sold;
@@ -199,6 +201,8 @@ class QuickSale extends Model
             $reportedVal = floatval($reported[$catId] ?? $soldVal);
 
             $differences[$catId] = $reportedVal - $soldVal;
+
+            Log::info("حسابکردنی جیاوازی - {$category->name}: فرۆشراو {$soldVal}, فرۆشراوی تۆ {$reportedVal}, جیاوازی {$differences[$catId]}");
         }
 
         $this->differences = $differences;
@@ -260,6 +264,8 @@ class QuickSale extends Model
                     // جیاوازی ئەرێنی (فرۆشراوی تۆ زیاترە)
                     // => بڕەکە لە کۆگا کەم دەکەینەوە و پارەکە دەچێتە قاسە
 
+                    Log::info("جیاوازی ئەرێنی - {$category->name}: بڕی کۆگای پێشوو {$category->stock_liters} لیتر, کەمکردنەوە {$diff} لیتر");
+
                     // پێش کەمکردنەوە، دڵنیابە کە بڕی پێویست لە کۆگا هەیە
                     if ($category->stock_liters < $diff) {
                         throw new \Exception("بڕی پێویست لە کۆگای {$category->name}دا نییە. بڕی ماوە: {$category->stock_liters} لیتر، پێویستە: {$diff} لیتر");
@@ -267,8 +273,6 @@ class QuickSale extends Model
 
                     // کەمکردنەوە لە کۆگا - بەپێی هەر کاتیگۆریەک
                     $category->updateStock($diff, 'subtract');
-
-                    Log::info("کەمکردنەوە لە کۆگای {$category->name}: {$diff} لیتر - کۆگای نوێ: {$category->stock_liters} لیتر");
 
                     // زیادکردنی پارە بۆ قاسە
                     $this->addMoneyToCash($totalPrice, $category, $diff);
@@ -318,6 +322,11 @@ class QuickSale extends Model
             }
 
             DB::commit();
+
+            // دوای تەواوبوون، پشکنینی کۆتایی کۆگا
+            foreach ($categories as $category) {
+                Log::info("کۆتایی کۆگا - {$category->name}: {$category->stock_liters} لیتر");
+            }
 
             return [
                 'applied' => true,
