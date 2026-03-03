@@ -135,19 +135,6 @@ class QuickSale extends Model
     }
 
     /**
-     * وەرگرتنی ڕەنگی بۆ دیزاین
-     */
-    public function getTypeColor($typeKey)
-    {
-        return match($typeKey) {
-            'fuel' => 'warning',
-            'oil' => 'success',
-            'gas' => 'info',
-            default => 'gray',
-        };
-    }
-
-    /**
      * وەرگرتنی خوێندنەوەی کۆتایی شەفتی بەیانی بۆ شەفتی ئێوارە
      */
     public static function getMorningFinalReadings($date)
@@ -221,22 +208,12 @@ class QuickSale extends Model
     }
 
     /**
-     * هەموو حسابەکان یەکجار
-     */
-    public function calculateAll()
-    {
-        $this->calculateSoldFromReadings();
-        $this->calculateDifferences();
-
-        return $this;
-    }
-
-    /**
-     * جێبەجێکردنی جیاوازیەکان بۆ کۆگا و قاسە (بەپێی هەر کاتیگۆریەک)
+     * جێبەجێکردنی جیاوازیەکان بۆ کۆگا و قاسە
      */
     public function applyDifferencesToStockAndCash()
     {
         $differences = $this->differences ?? [];
+
         if (empty($differences)) {
             return [
                 'applied' => false,
@@ -244,6 +221,15 @@ class QuickSale extends Model
                 'details' => []
             ];
         }
+
+        // سڕینەوەی فرۆشتنە پێشووەکان کە بۆ ئەم quick saleـە تۆمارکراون
+        Transaction::where('reference_number', $this->id)
+            ->where('type', 'quick_sale_difference')
+            ->delete();
+
+        Sale::where('notes', 'LIKE', "%شەفتی {$this->shift_name}%")
+            ->whereDate('sale_date', $this->sale_date)
+            ->delete();
 
         $categories = Category::all()->keyBy('id');
         $results = [
@@ -299,15 +285,14 @@ class QuickSale extends Model
                         'liters' => $diff,
                         'price_per_liter' => $pricePerLiter,
                         'total_price' => $totalPrice,
-                        'message' => "{$diff} لیتر {$category->name} فرۆشرا بە {$totalPrice} دینار"
+                        'message' => "✅ {$diff} لیتر {$category->name} فرۆشرا بە " . number_format($totalPrice) . " دینار"
                     ];
 
-                    // تۆمارکردنی مێژووی گۆڕانکاری
                     Log::info("جیاوازی ئەرێنی - شەفتی {$this->shift_name} - {$category->name}: {$diff} لیتر - {$totalPrice} دینار");
 
                 } else {
                     // جیاوازی نەرێنی (فرۆشراوی تۆ کەمترە)
-                    // => بڕەکە لە کۆگا دەمێنێتەوە، هیچ کارێک ناکەین
+                    // => بڕەکە لە کۆگا دەمێنێتەوە
 
                     $results['negative'][] = [
                         'category' => $category->name,
@@ -325,7 +310,7 @@ class QuickSale extends Model
                         'liters' => abs($diff),
                         'price_per_liter' => $pricePerLiter,
                         'total_price' => $totalPrice,
-                        'message' => "{$category->name}: {$diff} لیتر کەمتر فرۆشراوە، لە کۆگا دەمێنێتەوە"
+                        'message' => "⚠️ {$category->name}: " . abs($diff) . " لیتر کەمتر فرۆشراوە، لە کۆگا دەمێنێتەوە"
                     ];
 
                     Log::info("جیاوازی نەرێنی - شەفتی {$this->shift_name} - {$category->name}: " . abs($diff) . " لیتر کەمتر فرۆشراوە");
@@ -427,9 +412,7 @@ class QuickSale extends Model
 
         // زیادکردنی وردەکاری هەر کاتیگۆریەک
         foreach ($results['details'] as $detail) {
-            if ($detail['type'] == 'positive') {
-                $message[] = "   • {$detail['category_name']}: {$detail['liters']} لیتر - " . number_format($detail['total_price']) . " دینار";
-            }
+            $message[] = "   " . $detail['message'];
         }
 
         return implode("\n", $message);
