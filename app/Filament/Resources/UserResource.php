@@ -1,5 +1,5 @@
 <?php
-// app/Filament/Resources/UserResource.php
+
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\UserResource\Pages;

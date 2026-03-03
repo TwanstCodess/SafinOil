@@ -18,6 +18,9 @@ use Illuminate\Support\HtmlString;
 use Illuminate\Support\Facades\Auth;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TernaryFilter;
+use Filament\Tables\Enums\FiltersLayout;
+use Filament\Forms\Components\DatePicker;
 use Illuminate\Database\Eloquent\Builder;
 use Carbon\Carbon;
 
@@ -794,84 +797,53 @@ class QuickSaleResource extends Resource
                     ->sortable()
                     ->toggleable(),
             ])
+
+            // ========== فلتەرە پڕۆفیشناڵەکان ==========
             ->filters([
+
+                // فلتەری مەودای بەرواری فرۆشتن
                 Filter::make('sale_date')
+                    ->label('مەودای بەروار')
                     ->form([
-                        Forms\Components\DatePicker::make('single_date')
-                            ->label('بەروار')
-                            ->default(static::getTodayDate())
+                        DatePicker::make('from')
+                            ->label('لە ڕێکەوتی')
+                            ->placeholder('YYYY-MM-DD')
+                            ->displayFormat('Y/m/d')
+                            ->native(false)
+                            ->closeOnDateSelection(),
+                        DatePicker::make('until')
+                            ->label('تا ڕێکەوتی')
+                            ->placeholder('YYYY-MM-DD')
                             ->displayFormat('Y/m/d')
                             ->native(false)
                             ->closeOnDateSelection()
-                            ->columnSpan(1),
+                            ->after('from'),
                     ])
-                    ->columns(1)
-                    ->columnSpan(1)
-                    ->query(function (Builder $query, array $data): Builder {
+                    ->query(function (Builder $query, array $data) {
                         return $query
                             ->when(
-                                $data['single_date'],
-                                fn (Builder $query, $date): Builder => $query->whereDate('sale_date', $date),
-                                fn (Builder $query): Builder => $query->whereDate('sale_date', static::getTodayDate())
-                            );
-                    })
-                    ->baseQuery(fn (Builder $query) => $query)
-                    ->indicateUsing(function (array $data): ?string {
-                        $date = $data['single_date'] ?? static::getTodayDate();
-                        return 'بەروار: ' . Carbon::parse($date)->format('Y/m/d');
-                    }),
-
-                Filter::make('date_range')
-                    ->form([
-                        Forms\Components\Grid::make(2)
-                            ->schema([
-                                Forms\Components\DatePicker::make('from_date')
-                                    ->label('لە بەرواری')
-                                    ->default(static::getTodayDate())
-                                    ->displayFormat('Y/m/d')
-                                    ->native(false)
-                                    ->closeOnDateSelection(),
-
-                                Forms\Components\DatePicker::make('to_date')
-                                    ->label('تا بەرواری')
-                                    ->default(static::getTomorrowDate())
-                                    ->displayFormat('Y/m/d')
-                                    ->native(false)
-                                    ->closeOnDateSelection()
-                                    ->after('from_date'),
-                            ]),
-                    ])
-                    ->columns(1)
-                    ->columnSpan(2)
-                    ->query(function (Builder $query, array $data): Builder {
-                        return $query
-                            ->when(
-                                $data['from_date'],
-                                fn (Builder $query, $date): Builder => $query->whereDate('sale_date', '>=', $date),
+                                $data['from'],
+                                fn ($q) => $q->whereDate('sale_date', '>=', $data['from'])
                             )
                             ->when(
-                                $data['to_date'],
-                                fn (Builder $query, $date): Builder => $query->whereDate('sale_date', '<=', $date),
+                                $data['until'],
+                                fn ($q) => $q->whereDate('sale_date', '<=', $data['until'])
                             );
                     })
-                    ->indicateUsing(function (array $data): ?string {
+                    ->indicateUsing(function (array $data) {
                         $indicators = [];
-
-                        if ($data['from_date'] ?? null) {
-                            $indicators[] = 'لە ' . Carbon::parse($data['from_date'])->format('Y/m/d');
-                        } else {
-                            $indicators[] = 'لە ' . static::getTodayDateDisplay();
+                        if ($data['from'] ?? null) {
+                            $indicators[] = 'لە ' . \Carbon\Carbon::parse($data['from'])->format('Y/m/d');
                         }
-
-                        if ($data['to_date'] ?? null) {
-                            $indicators[] = 'تا ' . Carbon::parse($data['to_date'])->format('Y/m/d');
-                        } else {
-                            $indicators[] = 'تا ' . static::getTomorrowDateDisplay();
+                        if ($data['until'] ?? null) {
+                            $indicators[] = 'تا ' . \Carbon\Carbon::parse($data['until'])->format('Y/m/d');
                         }
+                        return $indicators ? 'بەروار: ' . implode(' - ', $indicators) : null;
+                    })
+                    ->columns(2)
+                    ->columnSpan(2),
 
-                        return $indicators ? implode(' ، ', $indicators) : null;
-                    }),
-
+                // فلتەری شەفت
                 SelectFilter::make('shift')
                     ->label('شەفت')
                     ->options([
@@ -879,8 +851,13 @@ class QuickSaleResource extends Resource
                         'evening' => '🌙 شەفتی ئێوارە',
                     ])
                     ->multiple()
-                    ->searchable(),
+                    ->searchable()
+                    ->preload()
+                    ->indicator('شەفت')
+                    ->placeholder('هەموو شەفتەکان')
+                    ->columnSpan(1),
 
+                // فلتەری ڕەوشت
                 SelectFilter::make('status')
                     ->label('ڕەوشت')
                     ->options([
@@ -888,40 +865,187 @@ class QuickSaleResource extends Resource
                         'closed' => 'داخراو',
                     ])
                     ->multiple()
-                    ->searchable(),
+                    ->searchable()
+                    ->preload()
+                    ->indicator('ڕەوشت')
+                    ->placeholder('هەموو ڕەوشتەکان')
+                    ->columnSpan(1),
 
-                Filter::make('created_at')
+                // فلتەری کڕینی ئەمڕۆ
+                Filter::make('today')
+                    ->label('ئەمڕۆ')
+                    ->toggle()
+                    ->query(fn ($query) => $query->whereDate('sale_date', today()))
+                    ->indicator('ئەمڕۆ')
+                    ->columnSpan(1),
+
+                // فلتەری کڕینی دوێنێ
+                Filter::make('yesterday')
+                    ->label('دوێنێ')
+                    ->toggle()
+                    ->query(fn ($query) => $query->whereDate('sale_date', today()->subDay()))
+                    ->indicator('دوێنێ')
+                    ->columnSpan(1),
+
+                // فلتەری کڕینی ئەم هەفتەیە
+                Filter::make('this_week')
+                    ->label('ئەم هەفتەیە')
+                    ->toggle()
+                    ->query(fn ($query) => $query->whereBetween('sale_date', [now()->startOfWeek(), now()->endOfWeek()]))
+                    ->indicator('ئەم هەفتەیە')
+                    ->columnSpan(1),
+
+                // فلتەری کڕینی ئەم مانگە
+                Filter::make('this_month')
+                    ->label('ئەم مانگە')
+                    ->toggle()
+                    ->query(fn ($query) => $query->whereMonth('sale_date', now()->month)
+                        ->whereYear('sale_date', now()->year))
+                    ->indicator('ئەم مانگە')
+                    ->columnSpan(1),
+
+                // فلتەری کڕینی ئەمساڵ
+                Filter::make('this_year')
+                    ->label('ئەمساڵ')
+                    ->toggle()
+                    ->query(fn ($query) => $query->whereYear('sale_date', now()->year))
+                    ->indicator('ئەمساڵ')
+                    ->columnSpan(1),
+
+                // فلتەری مەودای کۆی گشتی (دینار)
+                Filter::make('total_amount_range')
+                    ->label('مەودای کۆی گشتی (دینار)')
                     ->form([
-                        Forms\Components\DatePicker::make('created_from')
-                            ->label('تۆمارکراو لە بەرواری')
-                            ->default(static::getTodayDate())
-                            ->displayFormat('Y/m/d')
-                            ->native(false)
-                            ->closeOnDateSelection(),
-
-                        Forms\Components\DatePicker::make('created_until')
-                            ->label('تۆمارکراو تا بەرواری')
-                            ->default(static::getTomorrowDate())
-                            ->displayFormat('Y/m/d')
-                            ->native(false)
-                            ->closeOnDateSelection(),
+                        Forms\Components\TextInput::make('min_amount')
+                            ->label('کەمترین')
+                            ->numeric()
+                            ->prefix('د.ع')
+                            ->placeholder('١٠٠٠٠٠'),
+                        Forms\Components\TextInput::make('max_amount')
+                            ->label('زۆرترین')
+                            ->numeric()
+                            ->prefix('د.ع')
+                            ->placeholder('١٠٠٠٠٠٠'),
                     ])
-                    ->columns(2)
-                    ->columnSpan(2)
-                    ->query(function (Builder $query, array $data): Builder {
+                    ->query(function (Builder $query, array $data) {
                         return $query
                             ->when(
-                                $data['created_from'],
-                                fn (Builder $query, $date): Builder => $query->whereDate('created_at', '>=', $date),
+                                $data['min_amount'],
+                                fn ($q) => $q->where('total_amount', '>=', $data['min_amount'])
                             )
                             ->when(
-                                $data['created_until'],
-                                fn (Builder $query, $date): Builder => $query->whereDate('created_at', '<=', $date),
+                                $data['max_amount'],
+                                fn ($q) => $q->where('total_amount', '<=', $data['max_amount'])
                             );
-                    }),
+                    })
+                    ->indicateUsing(function (array $data) {
+                        $indicators = [];
+                        if ($data['min_amount'] ?? null) {
+                            $indicators[] = 'کەمتر نییە لە ' . number_format($data['min_amount']) . ' د.ع';
+                        }
+                        if ($data['max_amount'] ?? null) {
+                            $indicators[] = 'زیاتر نییە لە ' . number_format($data['max_amount']) . ' د.ع';
+                        }
+                        return $indicators ? 'کۆی گشتی: ' . implode(' و ', $indicators) : null;
+                    })
+                    ->columns(2)
+                    ->columnSpan(2),
+
+                // فلتەری مەودای کۆی لیتر
+                Filter::make('total_liters_range')
+                    ->label('مەودای کۆی لیتر')
+                    ->form([
+                        Forms\Components\TextInput::make('min_liters')
+                            ->label('کەمترین')
+                            ->numeric()
+                            ->suffix('لیتر')
+                            ->placeholder('١٠٠'),
+                        Forms\Components\TextInput::make('max_liters')
+                            ->label('زۆرترین')
+                            ->numeric()
+                            ->suffix('لیتر')
+                            ->placeholder('١٠٠٠'),
+                    ])
+                    ->query(function (Builder $query, array $data) {
+                        return $query
+                            ->when(
+                                $data['min_liters'],
+                                fn ($q) => $q->where('total_liters', '>=', $data['min_liters'])
+                            )
+                            ->when(
+                                $data['max_liters'],
+                                fn ($q) => $q->where('total_liters', '<=', $data['max_liters'])
+                            );
+                    })
+                    ->indicateUsing(function (array $data) {
+                        $indicators = [];
+                        if ($data['min_liters'] ?? null) {
+                            $indicators[] = 'کەمتر نییە لە ' . number_format($data['min_liters']) . ' لیتر';
+                        }
+                        if ($data['max_liters'] ?? null) {
+                            $indicators[] = 'زیاتر نییە لە ' . number_format($data['max_liters']) . ' لیتر';
+                        }
+                        return $indicators ? 'کۆی لیتر: ' . implode(' و ', $indicators) : null;
+                    })
+                    ->columns(2)
+                    ->columnSpan(2),
+
+                // فلتەری تۆمارکراو لەلایەن (بەکارهێنەر)
+                SelectFilter::make('created_by')
+                    ->label('تۆمارکراو لەلایەن')
+                    ->relationship('creator', 'name')
+                    ->multiple()
+                    ->searchable()
+                    ->preload()
+                    ->indicator('بەکارهێنەر')
+                    ->columnSpan(1),
+
+                // فلتەری مەودای کاتی تۆمارکردن
+                Filter::make('created_at')
+                    ->label('مەودای تۆمارکردن')
+                    ->form([
+                        DatePicker::make('from_created')
+                            ->label('لە')
+                            ->displayFormat('Y/m/d')
+                            ->native(false)
+                            ->closeOnDateSelection(),
+                        DatePicker::make('until_created')
+                            ->label('تا')
+                            ->displayFormat('Y/m/d')
+                            ->native(false)
+                            ->closeOnDateSelection()
+                            ->after('from_created'),
+                    ])
+                    ->query(function (Builder $query, array $data) {
+                        return $query
+                            ->when(
+                                $data['from_created'],
+                                fn ($q) => $q->whereDate('created_at', '>=', $data['from_created'])
+                            )
+                            ->when(
+                                $data['until_created'],
+                                fn ($q) => $q->whereDate('created_at', '<=', $data['until_created'])
+                            );
+                    })
+                    ->indicateUsing(function (array $data) {
+                        $indicators = [];
+                        if ($data['from_created'] ?? null) {
+                            $indicators[] = 'لە ' . \Carbon\Carbon::parse($data['from_created'])->format('Y/m/d');
+                        }
+                        if ($data['until_created'] ?? null) {
+                            $indicators[] = 'تا ' . \Carbon\Carbon::parse($data['until_created'])->format('Y/m/d');
+                        }
+                        return $indicators ? 'تۆمارکردن: ' . implode(' - ', $indicators) : null;
+                    })
+                    ->columns(2)
+                    ->columnSpan(2),
+
             ])
-            ->filtersFormColumns(2)
-            ->filtersLayout(Tables\Enums\FiltersLayout::AboveContentCollapsible)
+
+            // ڕێکخستنی فلتەرەکان (وەک FuelPurchaseResource)
+            ->filtersLayout(FiltersLayout::AboveContentCollapsible) // گۆڕدرا بۆ AboveContentCollapsible بۆ ڕێکخستنی باشتر
+            ->filtersFormColumns(3) // ٣ ستوون بۆ ڕێکخستنی باشتر
+            ->filtersFormWidth('full')
             ->persistFiltersInSession()
             ->deferFilters()
             ->filtersFormMaxHeight('500px')
@@ -939,7 +1063,7 @@ class QuickSaleResource extends Resource
                             <div class="flex items-center gap-2">
                                 <span class="bg-gray-800 text-white p-2 rounded-lg">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.012M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
                                     </svg>
                                 </span>
                                 <h3 class="text-lg font-bold text-white">پوختەی گشتی فرۆشتن</h3>
