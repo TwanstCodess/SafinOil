@@ -61,11 +61,7 @@ class EditQuickSale extends EditRecord
         try {
             DB::beginTransaction();
 
-            // دووبارە حسابکردنی هەموو شتەکان
-            $this->record->calculateSoldFromReadings();
-            $this->record->calculateDifferences();
-
-            // جێبەجێکردنی جیاوازیەکان بۆ کۆگا و قاسە (لە Modelـەوە)
+            // تەنها یەک جار هەموو شتەکان حساب بکە (لەناو Modelدا هەمووی دەکات)
             $result = $this->record->applyDifferencesToStockAndCash();
 
             // ئەگەر ئەم شەفتە بەیانی بێت و داخرابێت، شەفتی ئێوارەی هەمان ڕۆژ دەستکاری بکە
@@ -79,9 +75,7 @@ class EditQuickSale extends EditRecord
                         'initial_readings' => $this->record->final_readings
                     ]);
 
-                    // دووبارە حسابکردنی شەفتی ئێوارە
-                    $eveningShift->calculateSoldFromReadings();
-                    $eveningShift->calculateDifferences();
+                    // هەموو حسابەکانی شەفتی ئێوارە یەک جار
                     $eveningShift->applyDifferencesToStockAndCash();
 
                     Notification::make()
