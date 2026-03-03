@@ -1242,7 +1242,7 @@ class QuickSaleResource extends Resource
     {
         return [
             'index' => Pages\ListQuickSales::route('/'),
-            'create' => Pages\CreateQuickSale::route('/create'),
+            // 'create' => Pages\CreateQuickSale::route('/create'),
             'edit' => Pages\EditQuickSale::route('/{record}/edit'),
             'view' => Pages\ViewQuickSale::route('/{record}'),
         ];
