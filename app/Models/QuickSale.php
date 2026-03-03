@@ -208,7 +208,7 @@ class QuickSale extends Model
     }
 
     /**
-     * جێبەجێکردنی جیاوازیەکان بۆ کۆگا و قاسە (ئەمە هەموو شتێک دەکات)
+     * جێبەجێکردنی جیاوازیەکان بۆ کۆگا و قاسە (بەپێی هەر کاتیگۆریەک)
      */
     public function applyDifferencesToStockAndCash()
     {
@@ -265,8 +265,10 @@ class QuickSale extends Model
                         throw new \Exception("بڕی پێویست لە کۆگای {$category->name}دا نییە. بڕی ماوە: {$category->stock_liters} لیتر، پێویستە: {$diff} لیتر");
                     }
 
-                    // کەمکردنەوە لە کۆگا
+                    // کەمکردنەوە لە کۆگا - بەپێی هەر کاتیگۆریەک
                     $category->updateStock($diff, 'subtract');
+
+                    Log::info("کەمکردنەوە لە کۆگای {$category->name}: {$diff} لیتر - کۆگای نوێ: {$category->stock_liters} لیتر");
 
                     // زیادکردنی پارە بۆ قاسە
                     $this->addMoneyToCash($totalPrice, $category, $diff);
@@ -290,8 +292,6 @@ class QuickSale extends Model
                         'message' => "✅ {$diff} لیتر {$category->name} فرۆشرا بە " . number_format($totalPrice) . " دینار"
                     ];
 
-                    Log::info("جیاوازی ئەرێنی - شەفتی {$this->shift_name} - {$category->name}: {$diff} لیتر - {$totalPrice} دینار");
-
                 } else {
                     // جیاوازی نەرێنی (فرۆشراوی تۆ کەمترە)
                     // => بڕەکە لە کۆگا دەمێنێتەوە
@@ -314,8 +314,6 @@ class QuickSale extends Model
                         'total_price' => $totalPrice,
                         'message' => "⚠️ {$category->name}: " . abs($diff) . " لیتر کەمتر فرۆشراوە، لە کۆگا دەمێنێتەوە"
                     ];
-
-                    Log::info("جیاوازی نەرێنی - شەفتی {$this->shift_name} - {$category->name}: " . abs($diff) . " لیتر کەمتر فرۆشراوە");
                 }
             }
 
@@ -362,6 +360,8 @@ class QuickSale extends Model
         $cash->last_update = now();
         $cash->save();
 
+        Log::info("زیادکردنی پارە بۆ قاسە: {$amount} دینار - بۆ {$liters} لیتر {$category->name}");
+
         // تۆمارکردنی مامەڵە
         $transaction = Transaction::create([
             'transaction_number' => Transaction::generateTransactionNumber(),
@@ -386,7 +386,7 @@ class QuickSale extends Model
             'status' => 'paid',
             'paid_amount' => $amount,
             'remaining_amount' => 0,
-            'notes' => "فرۆشتنی جیاوازی لە شەفتی {$this->shift_name}",
+            'notes' => "فرۆشتنی جیاوازی لە شەفتی {$this->shift_name} - {$category->name}",
         ]);
 
         // پەیوەستکردنی transaction بە sale
