@@ -169,9 +169,12 @@ class QuickSale extends Model
 
     /**
      * حسابکردنی فرۆشراوی هەر کاتیگۆریەک
-     * sold = initial - final
-     * *** ئەم فەنکشنە sold_data لە model دەنووسێت بەڵام DB save نادات ***
-     * *** DB save تەنها لە applyDifferencesToStockAndCash() دەکرێت ***
+     *
+     * sold = (initial - final) ÷ 2
+     *
+     * هۆکار: خوێندنەوەی کاونتەر هەردوو لایەنی پەمپەکە دەگرێتەوە
+     * (دووشەفت یان دووپەمپ) بۆ ئەوەی فرۆشتنی یەک شەفت/پەمپ
+     * دەبێت لە ٢ دابەش بکرێت
      */
     public function calculateSoldFromReadings(): array
     {
@@ -185,14 +188,16 @@ class QuickSale extends Model
             $catId      = $category->id;
             $initialVal = floatval($initial[$catId] ?? 0);
             $finalVal   = floatval($final[$catId]   ?? 0);
-            $soldVal    = $initialVal - $finalVal;
+
+            // *** دابەشکردن بەسەر ٢ ***
+            $soldVal = ($initialVal - $finalVal) / 2;
 
             $sold[$catId]  = $soldVal;
             $totalAmount  += $soldVal * floatval($category->current_price);
             $totalLiters  += $soldVal;
         }
 
-        // تەنها لە model دەنووسێت — DB save لاحق دەکرێت
+        // تەنها لە model دەنووسێت — DB save لە applyDifferencesToStockAndCash() دەکرێت
         $this->sold_data    = $sold;
         $this->total_amount = $totalAmount;
         $this->total_liters = $totalLiters;
@@ -203,7 +208,6 @@ class QuickSale extends Model
     /**
      * حسابکردنی جیاوازی
      * diff = reported - sold
-     * ئەگەر reported خاوێن بێت، diff = 0
      */
     public function calculateDifferences(): array
     {
@@ -225,9 +229,6 @@ class QuickSale extends Model
 
     // ===================== Stock & Cash =====================
 
-    /**
-     * Reverse مامەڵەکانی پێشووی ئەم quick sale
-     */
     protected function reverseStockAndCashForPreviousTransactions(): void
     {
         $previousTransactions = Transaction::where('reference_number', $this->id)
@@ -283,20 +284,17 @@ class QuickSale extends Model
     /**
      * جێبەجێکردنی فرۆشتن بۆ کۆگا و قاسە
      *
-     * *** چارەسەری دووجار گرتنەوە ***
-     * پێش هەموو شتێک، چێک دەکات ئایا transactions ی ئەم
-     * request دا پێشتر تۆمارکراون یان نا.
-     * بۆ ئەمەش پشت بە DB lock دەبەستێت نەک cache.
+     * گام ١: Reverse مامەڵەکانی کۆن
+     * گام ٢: sold_data (کە پێشتر ÷2 کراوە) لە کۆگا کەم دکرێتەوە
+     * گام ٣: جیاوازیەکان (reported vs sold)
      */
     public function applyDifferencesToStockAndCash(): array
     {
-        // --- حسابکردنی sold و جیاوازیەکان ---
         $this->calculateSoldFromReadings();
         $differences = $this->calculateDifferences();
 
         $sold = $this->sold_data ?? [];
 
-        // ئەگەر هیچ فرۆشتنێک نییە، دەگەڕێینەوە
         $hasSold = collect($sold)->some(fn($v) => floatval($v) > 0.01);
         $hasDiff = collect($differences)->some(fn($v) => abs(floatval($v)) > 0.01);
 
@@ -323,10 +321,7 @@ class QuickSale extends Model
             // گام ١: Reverse مامەڵەکانی کۆن
             $this->reverseStockAndCashForPreviousTransactions();
 
-            // *** گرینگ: پاش reverse، sold_data و differences دووبارە حساب بکە ***
-            // چونکە reverseStockAndCashForPreviousTransactions نوێکردنەوەی DB دەکات
-            // بەڵام $this->sold_data پێشتر حساب کرابوو، پێویست نییە دووبارە بکرێت
-            // تەنها DB save بکە بۆ ئەوەی نوێترین داتا بمێنێتەوە
+            // ذەخیرەکردنی نوێترین داتا لە DB
             DB::table('quick_sales')->where('id', $this->id)->update([
                 'sold_data'    => json_encode($sold),
                 'differences'  => json_encode($differences),
@@ -337,7 +332,7 @@ class QuickSale extends Model
             // داتای کاتیگۆریەکان لە DB بخوێنەرەوە دوای reverse
             $categories = Category::all()->keyBy('id');
 
-            // گام ٢: کۆگا کەم بکەرەوە بەپێی sold_data
+            // گام ٢: کۆگا کەم بکەرەوە بەپێی sold_data (پێشتر ÷2 کراوە)
             foreach ($sold as $catId => $soldLiters) {
                 $soldLiters = floatval($soldLiters);
                 if ($soldLiters <= 0.01) {
@@ -364,12 +359,11 @@ class QuickSale extends Model
                     );
                 }
 
-                // *** تەنها یەک جار کەم دکرێتەوە ***
                 DB::table('categories')
                     ->where('id', $catId)
                     ->decrement('stock_liters', $soldLiters);
 
-                Log::info("فرۆشتن QuickSale#{$this->id} — {$category->name}: -{$soldLiters}L");
+                Log::info("فرۆشتن QuickSale#{$this->id} — {$category->name}: -{$soldLiters}L (÷2 کرابوو)");
 
                 $this->recordSaleAndCash($totalPrice, $category, $soldLiters, 'quick_sale');
 
@@ -393,7 +387,7 @@ class QuickSale extends Model
                 ];
             }
 
-            // گام ٣: جیاوازیەکان
+            // گام ٣: جیاوازیەکان (ئەگەر reported_sold هەبوو)
             foreach ($differences as $catId => $diff) {
                 if (abs($diff) < 0.01) {
                     continue;
