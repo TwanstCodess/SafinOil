@@ -232,7 +232,7 @@ class QuickSale extends Model
     }
 
     /**
-     * جێبەجێکردنی جیاوازیەکان بۆ کۆگا و قاسە
+     * جێبەجێکردنی جیاوازیەکان بۆ کۆگا و قاسە (بەپێی هەر کاتیگۆریەک)
      */
     public function applyDifferencesToStockAndCash()
     {
@@ -240,7 +240,8 @@ class QuickSale extends Model
         if (empty($differences)) {
             return [
                 'applied' => false,
-                'message' => 'هیچ جیاوازیەک نییە'
+                'message' => 'هیچ جیاوازیەک نییە',
+                'details' => []
             ];
         }
 
@@ -250,6 +251,9 @@ class QuickSale extends Model
             'negative' => [],
             'total_positive_amount' => 0,
             'total_negative_amount' => 0,
+            'total_positive_liters' => 0,
+            'total_negative_liters' => 0,
+            'details' => []
         ];
 
         DB::beginTransaction();
@@ -268,15 +272,38 @@ class QuickSale extends Model
                     // جیاوازی ئەرێنی (فرۆشراوی تۆ زیاترە)
                     // => بڕەکە لە کۆگا کەم دەکەینەوە و پارەکە دەچێتە قاسە
 
+                    // پێش کەمکردنەوە، دڵنیابە کە بڕی پێویست لە کۆگا هەیە
+                    if ($category->stock_liters < $diff) {
+                        throw new \Exception("بڕی پێویست لە کۆگای {$category->name}دا نییە. بڕی ماوە: {$category->stock_liters} لیتر، پێویستە: {$diff} لیتر");
+                    }
+
                     // کەمکردنەوە لە کۆگا
                     $category->updateStock($diff, 'subtract');
+
+                    // زیادکردنی پارە بۆ قاسە
+                    $this->addMoneyToCash($totalPrice, $category, $diff);
 
                     $results['positive'][] = [
                         'category' => $category->name,
                         'liters' => $diff,
-                        'price' => $totalPrice
+                        'price' => $totalPrice,
+                        'price_per_liter' => $pricePerLiter
                     ];
                     $results['total_positive_amount'] += $totalPrice;
+                    $results['total_positive_liters'] += $diff;
+
+                    $results['details'][] = [
+                        'type' => 'positive',
+                        'category_id' => $catId,
+                        'category_name' => $category->name,
+                        'liters' => $diff,
+                        'price_per_liter' => $pricePerLiter,
+                        'total_price' => $totalPrice,
+                        'message' => "{$diff} لیتر {$category->name} فرۆشرا بە {$totalPrice} دینار"
+                    ];
+
+                    // تۆمارکردنی مێژووی گۆڕانکاری
+                    Log::info("جیاوازی ئەرێنی - شەفتی {$this->shift_name} - {$category->name}: {$diff} لیتر - {$totalPrice} دینار");
 
                 } else {
                     // جیاوازی نەرێنی (فرۆشراوی تۆ کەمترە)
@@ -285,22 +312,32 @@ class QuickSale extends Model
                     $results['negative'][] = [
                         'category' => $category->name,
                         'liters' => abs($diff),
-                        'price' => $totalPrice
+                        'price' => $totalPrice,
+                        'price_per_liter' => $pricePerLiter
                     ];
                     $results['total_negative_amount'] += $totalPrice;
-                }
-            }
+                    $results['total_negative_liters'] += abs($diff);
 
-            // زیادکردنی پارە بۆ قاسە (ئەگەر جیاوازی ئەرێنی هەبێت)
-            if ($results['total_positive_amount'] > 0) {
-                $this->addMoneyToCash($results['total_positive_amount']);
+                    $results['details'][] = [
+                        'type' => 'negative',
+                        'category_id' => $catId,
+                        'category_name' => $category->name,
+                        'liters' => abs($diff),
+                        'price_per_liter' => $pricePerLiter,
+                        'total_price' => $totalPrice,
+                        'message' => "{$category->name}: {$diff} لیتر کەمتر فرۆشراوە، لە کۆگا دەمێنێتەوە"
+                    ];
+
+                    Log::info("جیاوازی نەرێنی - شەفتی {$this->shift_name} - {$category->name}: " . abs($diff) . " لیتر کەمتر فرۆشراوە");
+                }
             }
 
             DB::commit();
 
             return [
                 'applied' => true,
-                'results' => $results
+                'results' => $results,
+                'message' => $this->generateResultMessage($results)
             ];
 
         } catch (\Exception $e) {
@@ -309,7 +346,8 @@ class QuickSale extends Model
 
             return [
                 'applied' => false,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'details' => []
             ];
         }
     }
@@ -317,7 +355,7 @@ class QuickSale extends Model
     /**
      * زیادکردنی پارە بۆ قاسە
      */
-    protected function addMoneyToCash($amount)
+    protected function addMoneyToCash($amount, $category, $liters)
     {
         $cash = Cash::first();
         if (!$cash) {
@@ -338,85 +376,63 @@ class QuickSale extends Model
         $cash->save();
 
         // تۆمارکردنی مامەڵە
-        Transaction::create([
+        $transaction = Transaction::create([
             'transaction_number' => Transaction::generateTransactionNumber(),
             'type' => 'quick_sale_difference',
             'amount' => $amount,
             'balance_before' => $balanceBefore,
             'balance_after' => $cash->balance,
             'reference_number' => $this->id,
-            'description' => "جیاوازی فرۆشی خێرا - شەفتی {$this->shift_name} - " . number_format($amount) . " د.ع",
+            'description' => "فرۆشتنی جیاوازی - {$liters} لیتر {$category->name} - شەفتی {$this->shift_name}",
             'transaction_date' => $this->sale_date,
             'created_by' => auth()->user()?->name ?? 'سیستەم',
         ]);
+
+        // تۆمارکردنی فرۆشتن لە sales
+        $sale = Sale::create([
+            'category_id' => $category->id,
+            'liters' => $liters,
+            'price_per_liter' => $category->current_price,
+            'total_price' => $amount,
+            'sale_date' => $this->sale_date,
+            'payment_type' => 'cash',
+            'status' => 'paid',
+            'paid_amount' => $amount,
+            'remaining_amount' => 0,
+            'notes' => "فرۆشتنی جیاوازی لە شەفتی {$this->shift_name}",
+        ]);
+
+        // پەیوەستکردنی transaction بە sale
+        $transaction->transactionable_type = Sale::class;
+        $transaction->transactionable_id = $sale->id;
+        $transaction->save();
 
         return $cash;
     }
 
     /**
-     * تۆمارکردنی فرۆشتن بۆ جیاوازیەکان
+     * دروستکردنی پەیامی کۆتایی
      */
-    public function createSalesForDifferences()
+    protected function generateResultMessage($results)
     {
-        $differences = $this->differences ?? [];
-        if (empty($differences)) {
-            return [];
+        $message = [];
+
+        if ($results['total_positive_liters'] > 0) {
+            $message[] = "✅ فرۆشتنی زیادە: " . number_format($results['total_positive_liters']) . " لیتر - " . number_format($results['total_positive_amount']) . " دینار زیاد کرا بۆ قاسە";
         }
 
-        $categories = Category::all()->keyBy('id');
-        $sales = [];
+        if ($results['total_negative_liters'] > 0) {
+            $message[] = "⚠️ کەمی فرۆشراو: " . number_format($results['total_negative_liters']) . " لیتر - " . number_format($results['total_negative_amount']) . " دینار لە کۆگا دەمێنێتەوە";
+        }
 
-        DB::beginTransaction();
-
-        try {
-            foreach ($differences as $catId => $diff) {
-                if ($diff <= 0.01) continue; // تەنها جیاوازی ئەرێنی
-
-                $category = $categories[$catId] ?? null;
-                if (!$category) continue;
-
-                $pricePerLiter = $category->current_price;
-                $totalPrice = $diff * $pricePerLiter;
-
-                // تۆمارکردنی فرۆشتن
-                $sale = Sale::create([
-                    'category_id' => $category->id,
-                    'liters' => $diff,
-                    'price_per_liter' => $pricePerLiter,
-                    'total_price' => $totalPrice,
-                    'sale_date' => $this->sale_date,
-                    'payment_type' => 'cash',
-                    'status' => 'paid',
-                    'paid_amount' => $totalPrice,
-                    'remaining_amount' => 0,
-                    'notes' => "فرۆشتنی جیاوازی لە شەفتی {$this->shift_name}",
-                ]);
-
-                $sales[] = $sale;
-
-                // پەیوەستکردنی transaction بە sale
-                $transaction = Transaction::where('reference_number', $this->id)
-                    ->where('type', 'quick_sale_difference')
-                    ->latest()
-                    ->first();
-
-                if ($transaction) {
-                    $transaction->transactionable_type = Sale::class;
-                    $transaction->transactionable_id = $sale->id;
-                    $transaction->save();
-                }
+        // زیادکردنی وردەکاری هەر کاتیگۆریەک
+        foreach ($results['details'] as $detail) {
+            if ($detail['type'] == 'positive') {
+                $message[] = "   • {$detail['category_name']}: {$detail['liters']} لیتر - " . number_format($detail['total_price']) . " دینار";
             }
-
-            DB::commit();
-
-            return $sales;
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Error in createSalesForDifferences: ' . $e->getMessage());
-
-            return [];
         }
+
+        return implode("\n", $message);
     }
 
     /**
