@@ -13,10 +13,19 @@ class QuickSale extends Model
     protected $table = 'quick_sales';
 
     protected $fillable = [
-        'sale_date', 'shift', 'status', 'categories_data',
-        'initial_readings', 'final_readings', 'sold_data',
-        'reported_sold', 'differences', 'total_amount',
-        'total_liters', 'closed_by', 'created_by',
+        'sale_date',
+        'shift',
+        'status',
+        'categories_data',
+        'initial_readings',
+        'final_readings',
+        'sold_data',
+        'reported_sold',
+        'differences',
+        'total_amount',
+        'total_liters',
+        'closed_by',
+        'created_by',
     ];
 
     protected $casts = [
@@ -49,8 +58,8 @@ class QuickSale extends Model
     public function getShiftNameAttribute(): string
     {
         return match($this->shift) {
-            'morning' => 'شەفتی بەیانی',
-            'evening' => 'شەفتی ئێوارە',
+            'morning' => '🌅 شەفتی بەیانی',
+            'evening' => '🌙 شەفتی ئێوارە',
             default   => 'نادیار',
         };
     }
@@ -64,27 +73,119 @@ class QuickSale extends Model
         };
     }
 
-    public function getTotalLitersAttribute()
+    public function getStatusNameAttribute(): string
     {
-        if (isset($this->attributes['total_liters'])) {
-            return $this->attributes['total_liters'];
-        }
-        $total = 0;
-        $sold  = $this->sold_data ?? [];
-        if (!empty($sold)) {
-            foreach ($sold as $liters) {
-                $total += floatval($liters);
-            }
-        } elseif (!empty($this->initial_readings) && !empty($this->final_readings)) {
-            foreach ($this->initial_readings as $catId => $initial) {
-                $total += floatval($initial) - floatval($this->final_readings[$catId] ?? 0);
-            }
-        }
-        return $total;
+        return match($this->status) {
+            'open' => 'کراوە',
+            'closed' => 'داخراو',
+            default => 'نادیار',
+        };
+    }
+
+    public function getStatusColorAttribute(): string
+    {
+        return match($this->status) {
+            'open' => 'success',
+            'closed' => 'gray',
+            default => 'warning',
+        };
     }
 
     // ===================== Static Helpers =====================
 
+    /**
+     * گەڕاندنەوەی پوختەی فرۆشتن بەپێی بەروار
+     */
+    public static function getTotalsByDate($date = null): array
+    {
+        $date = $date ?? Carbon::now()->format('Y-m-d');
+
+        $totals = [
+            'morning' => [
+                'count' => 0,
+                'total_liters' => 0,
+                'total_amount' => 0
+            ],
+            'evening' => [
+                'count' => 0,
+                'total_liters' => 0,
+                'total_amount' => 0
+            ],
+        ];
+
+        $sales = self::whereDate('sale_date', $date)->get();
+
+        foreach ($sales as $sale) {
+            $shift = $sale->shift;
+            if (isset($totals[$shift])) {
+                $totals[$shift]['count']++;
+                $totals[$shift]['total_liters'] += floatval($sale->total_liters ?? 0);
+                $totals[$shift]['total_amount'] += floatval($sale->total_amount ?? 0);
+            }
+        }
+
+        return $totals;
+    }
+
+    /**
+     * گەڕاندنەوەی پوختەی فرۆشتن بۆ ماوەی دیاریکراو
+     */
+    public static function getTotalsForDateRange($fromDate, $toDate): array
+    {
+        $totals = [
+            'morning' => [
+                'count' => 0,
+                'total_liters' => 0,
+                'total_amount' => 0
+            ],
+            'evening' => [
+                'count' => 0,
+                'total_liters' => 0,
+                'total_amount' => 0
+            ],
+            'total' => [
+                'count' => 0,
+                'total_liters' => 0,
+                'total_amount' => 0
+            ],
+        ];
+
+        $sales = self::whereDate('sale_date', '>=', $fromDate)
+            ->whereDate('sale_date', '<=', $toDate)
+            ->get();
+
+        foreach ($sales as $sale) {
+            $shift = $sale->shift;
+            if (isset($totals[$shift])) {
+                $totals[$shift]['count']++;
+                $totals[$shift]['total_liters'] += floatval($sale->total_liters ?? 0);
+                $totals[$shift]['total_amount'] += floatval($sale->total_amount ?? 0);
+
+                $totals['total']['count']++;
+                $totals['total']['total_liters'] += floatval($sale->total_liters ?? 0);
+                $totals['total']['total_amount'] += floatval($sale->total_amount ?? 0);
+            }
+        }
+
+        return $totals;
+    }
+
+    /**
+     * گەڕاندنەوەی خوێندنەوەی کۆتایی شەفتی بەیانی بۆ بەکارهێنان لە شەفتی ئێوارە
+     */
+    public static function getMorningFinalReadings($date)
+    {
+        $morning = self::whereDate('sale_date', $date)
+            ->where('shift', 'morning')
+            ->where('status', 'closed')
+            ->first();
+
+        return $morning ? $morning->final_readings : [];
+    }
+
+    /**
+     * کۆمەڵە کاتیگۆریەکان بەپێی جۆریان
+     */
     public static function getCategoriesGroupedByType()
     {
         $grouped = [];
@@ -107,6 +208,9 @@ class QuickSale extends Model
         return $grouped;
     }
 
+    /**
+     * لیستی هەموو کاتیگۆریەکان
+     */
     public static function getAllCategoriesList()
     {
         $list = [];
@@ -123,58 +227,20 @@ class QuickSale extends Model
         return $list;
     }
 
-    public static function getMorningFinalReadings($date)
-    {
-        $morning = self::whereDate('sale_date', $date)->where('shift', 'morning')->first();
-        return $morning ? $morning->final_readings : [];
-    }
-
-    public static function getTotalsByDate($date = null)
-    {
-        $date   = $date ?? Carbon::now()->format('Y-m-d');
-        $totals = [
-            'morning' => ['count' => 0, 'total_liters' => 0, 'total_amount' => 0],
-            'evening' => ['count' => 0, 'total_liters' => 0, 'total_amount' => 0],
-        ];
-        foreach (self::whereDate('sale_date', $date)->get() as $sale) {
-            $totals[$sale->shift]['count']++;
-            $totals[$sale->shift]['total_liters'] += $sale->total_liters ?? 0;
-            $totals[$sale->shift]['total_amount'] += $sale->total_amount ?? 0;
-        }
-        return $totals;
-    }
-
-    public static function getTotalsForDateRange($fromDate, $toDate)
-    {
-        $totals = [
-            'morning' => ['count' => 0, 'total_liters' => 0, 'total_amount' => 0],
-            'evening' => ['count' => 0, 'total_liters' => 0, 'total_amount' => 0],
-            'total'   => ['count' => 0, 'total_liters' => 0, 'total_amount' => 0],
-        ];
-        foreach (
-            self::whereDate('sale_date', '>=', $fromDate)
-                ->whereDate('sale_date', '<=', $toDate)->get() as $sale
-        ) {
-            $totals[$sale->shift]['count']++;
-            $totals[$sale->shift]['total_liters'] += $sale->total_liters ?? 0;
-            $totals[$sale->shift]['total_amount'] += $sale->total_amount ?? 0;
-            $totals['total']['count']++;
-            $totals['total']['total_liters'] += $sale->total_liters ?? 0;
-            $totals['total']['total_amount'] += $sale->total_amount ?? 0;
-        }
-        return $totals;
-    }
-
     // ===================== Calculations =====================
 
     /**
      * حسابکردنی فرۆشراوی هەر کاتیگۆریەک
      *
-     * sold = (initial - final) ÷ 2
+     * @ IMPORTANT:
+     * - خوێندنەوەکان (initial - final) بریتیە لە **کۆی هەردوو لای پەمپ**
+     * - فرۆشتنی ڕاستەقینە بۆ یەک شەفت = (initial - final) / 2
+     * - بڕی پارە = (initial - final) × نرخ / 2
      *
-     * هۆکار: خوێندنەوەی کاونتەر هەردوو لایەنی پەمپەکە دەگرێتەوە
-     * (دووشەفت یان دووپەمپ) بۆ ئەوەی فرۆشتنی یەک شەفت/پەمپ
-     * دەبێت لە ٢ دابەش بکرێت
+     * بۆ نموونە:
+     * initial = 1000, final = 900 => جیاوازی = 100
+     * فرۆشراوی ڕاستەقینە = 50 لیتر
+     * پارەی وەرگیراو = (100 × نرخ) ÷ 2 = 42,500 دینار
      */
     public function calculateSoldFromReadings(): array
     {
@@ -191,19 +257,17 @@ class QuickSale extends Model
 
             $fullDiff = $initialVal - $finalVal;
 
-            // *** لیتری کۆگا = جیاوازی ÷ 2 ***
-            // *** پارە = جیاوازی × نرخ (بەبێ دابەش) ***
+            // ✅ لیتری کۆگا (بۆ یەک شەفت) = جیاوازی ÷ 2
             $soldLitersForStock = $fullDiff / 2;
-            $soldAmountFull     = $fullDiff * floatval($category->current_price);
 
-            // sold_data لیتری ÷2 ذەخیرە دەکات (بۆ کەمکردنەوەی کۆگا)
-            // بەڵام total_amount بەپێی جیاوازی تەواو حساب دەکرێت
+            // ✅ پارە = (جیاوازی × نرخ) ÷ 2
+            $soldAmountForShift = ($fullDiff * floatval($category->current_price)) / 2;
+
             $sold[$catId]  = $soldLitersForStock;
-            $totalAmount  += $soldAmountFull;
+            $totalAmount  += $soldAmountForShift;
             $totalLiters  += $soldLitersForStock;
         }
 
-        // تەنها لە model دەنووسێت — DB save لە applyDifferencesToStockAndCash() دەکرێت
         $this->sold_data    = $sold;
         $this->total_amount = $totalAmount;
         $this->total_liters = $totalLiters;
@@ -212,8 +276,7 @@ class QuickSale extends Model
     }
 
     /**
-     * حسابکردنی جیاوازی
-     * diff = reported - sold
+     * حسابکردنی جیاوازی نێوان فرۆشراوی ڕاستەقینە و فرۆشراوی تۆمارکراو
      */
     public function calculateDifferences(): array
     {
@@ -225,6 +288,7 @@ class QuickSale extends Model
             $catId       = $category->id;
             $soldVal     = floatval($sold[$catId]     ?? 0);
             $reportedVal = floatval($reported[$catId] ?? $soldVal);
+
             $differences[$catId] = $reportedVal - $soldVal;
         }
 
@@ -235,6 +299,9 @@ class QuickSale extends Model
 
     // ===================== Stock & Cash =====================
 
+    /**
+     * گەڕاندنەوەی مامەڵەکانی پێشوو بۆ دۆخی پێش خۆیان
+     */
     protected function reverseStockAndCashForPreviousTransactions(): void
     {
         $previousTransactions = Transaction::where('reference_number', $this->id)
@@ -249,10 +316,7 @@ class QuickSale extends Model
         $cash = Cash::first();
 
         foreach ($previousTransactions as $transaction) {
-            if (
-                $transaction->transactionable_type === Sale::class &&
-                $transaction->transactionable_id
-            ) {
+            if ($transaction->transactionable_type === Sale::class && $transaction->transactionable_id) {
                 $prevSale = Sale::find($transaction->transactionable_id);
                 if ($prevSale && $prevSale->liters > 0) {
                     DB::table('categories')
@@ -289,10 +353,6 @@ class QuickSale extends Model
 
     /**
      * جێبەجێکردنی فرۆشتن بۆ کۆگا و قاسە
-     *
-     * گام ١: Reverse مامەڵەکانی کۆن
-     * گام ٢: sold_data (کە پێشتر ÷2 کراوە) لە کۆگا کەم دکرێتەوە
-     * گام ٣: جیاوازیەکان (reported vs sold)
      */
     public function applyDifferencesToStockAndCash(): array
     {
@@ -324,10 +384,8 @@ class QuickSale extends Model
         DB::beginTransaction();
 
         try {
-            // گام ١: Reverse مامەڵەکانی کۆن
             $this->reverseStockAndCashForPreviousTransactions();
 
-            // ذەخیرەکردنی نوێترین داتا لە DB
             DB::table('quick_sales')->where('id', $this->id)->update([
                 'sold_data'    => json_encode($sold),
                 'differences'  => json_encode($differences),
@@ -335,46 +393,28 @@ class QuickSale extends Model
                 'total_liters' => $this->total_liters,
             ]);
 
-            // داتای کاتیگۆریەکان لە DB بخوێنەرەوە دوای reverse
             $categories = Category::all()->keyBy('id');
 
-            // گام ٢: کۆگا کەم بکەرەوە بەپێی sold_data (پێشتر ÷2 کراوە)
+            // گام ٢: کۆگا کەم بکەرەوە بەپێی sold_data
             foreach ($sold as $catId => $soldLiters) {
                 $soldLiters = floatval($soldLiters);
-                if ($soldLiters <= 0.01) {
-                    continue;
-                }
+                if ($soldLiters <= 0.01) continue;
 
                 $category = $categories[$catId] ?? null;
-                if (!$category) {
-                    continue;
-                }
+                if (!$category) continue;
 
                 $pricePerLiter = floatval($category->current_price);
-                // پارە = (لیتر × 2) × نرخ — چونکە sold_data پێشتر ÷2 کرابوو
-                $totalPrice    = ($soldLiters * 2) * $pricePerLiter;
+                $totalPrice = $soldLiters * $pricePerLiter; // پارە = لیتر × نرخ
 
-                // بررسی کۆگا ڕاستەوخۆ لە DB
-                $currentStock = floatval(
-                    DB::table('categories')->where('id', $catId)->value('stock_liters') ?? 0
-                );
-
+                $currentStock = floatval(DB::table('categories')->where('id', $catId)->value('stock_liters') ?? 0);
                 if ($currentStock < $soldLiters) {
-                    throw new \Exception(
-                        "بڕی پێویست لە کۆگای {$category->name}دا نییە. " .
-                        "ماوە: {$currentStock}L، پێویستە: {$soldLiters}L"
-                    );
+                    throw new \Exception("بڕی پێویست لە کۆگای {$category->name}دا نییە");
                 }
 
-                DB::table('categories')
-                    ->where('id', $catId)
-                    ->decrement('stock_liters', $soldLiters);
-
-                Log::info("فرۆشتن QuickSale#{$this->id} — {$category->name}: -{$soldLiters}L (÷2 کرابوو)");
-
+                DB::table('categories')->where('id', $catId)->decrement('stock_liters', $soldLiters);
                 $this->recordSaleAndCash($totalPrice, $category, $soldLiters, 'quick_sale');
 
-                $results['sold_details'][]     = [
+                $results['sold_details'][] = [
                     'category_name'   => $category->name,
                     'liters'          => $soldLiters,
                     'price_per_liter' => $pricePerLiter,
@@ -382,74 +422,50 @@ class QuickSale extends Model
                 ];
                 $results['total_sold_amount'] += $totalPrice;
                 $results['total_sold_liters'] += $soldLiters;
-                $results['details'][]          = [
+                $results['details'][] = [
                     'type'          => 'sold',
-                    'category_id'   => $catId,
                     'category_name' => $category->name,
                     'liters'        => $soldLiters,
                     'total_price'   => $totalPrice,
-                    'message'       =>
-                        "✅ {$soldLiters} لیتر {$category->name} فرۆشرا بە " .
-                        number_format($totalPrice) . " دینار",
+                    'message'       => "✅ {$soldLiters} لیتر {$category->name} - " . number_format($totalPrice) . " د.ع",
                 ];
             }
 
-            // گام ٣: جیاوازیەکان (ئەگەر reported_sold هەبوو)
+            // گام ٣: جیاوازیەکان
             foreach ($differences as $catId => $diff) {
-                if (abs($diff) < 0.01) {
-                    continue;
-                }
+                if (abs($diff) < 0.01) continue;
 
                 $category = $categories[$catId] ?? null;
-                if (!$category) {
-                    continue;
-                }
+                if (!$category) continue;
 
                 $pricePerLiter = floatval($category->current_price);
-                $totalPrice    = abs($diff) * $pricePerLiter;
+                $totalPrice = $diff * $pricePerLiter;
 
                 if ($diff > 0) {
-                    $currentStock = floatval(
-                        DB::table('categories')->where('id', $catId)->value('stock_liters') ?? 0
-                    );
-
+                    $currentStock = floatval(DB::table('categories')->where('id', $catId)->value('stock_liters') ?? 0);
                     if ($currentStock < $diff) {
-                        throw new \Exception(
-                            "بڕی پێویست لە کۆگای {$category->name}دا نییە بۆ جیاوازی. " .
-                            "ماوە: {$currentStock}L، پێویستە: {$diff}L"
-                        );
+                        throw new \Exception("بڕی پێویست لە کۆگای {$category->name}دا نییە بۆ جیاوازی");
                     }
 
-                    DB::table('categories')
-                        ->where('id', $catId)
-                        ->decrement('stock_liters', floatval($diff));
-
+                    DB::table('categories')->where('id', $catId)->decrement('stock_liters', $diff);
                     $this->recordSaleAndCash($totalPrice, $category, $diff, 'quick_sale_difference');
 
-                    $results['positive'][]             = ['category' => $category->name, 'liters' => $diff, 'price' => $totalPrice];
+                    $results['positive'][] = ['category' => $category->name, 'liters' => $diff, 'price' => $totalPrice];
                     $results['total_positive_amount'] += $totalPrice;
                     $results['total_positive_liters'] += $diff;
-                    $results['details'][]              = [
-                        'type'          => 'positive',
-                        'category_id'   => $catId,
-                        'category_name' => $category->name,
-                        'liters'        => $diff,
-                        'total_price'   => $totalPrice,
-                        'message'       => "⚕ جیاوازی: {$diff}L {$category->name} — " . number_format($totalPrice) . " دینار",
+                    $results['details'][] = [
+                        'type'    => 'positive',
+                        'message' => "⚕ جیاوازی زیادە: {$diff}L {$category->name} — " . number_format($totalPrice) . " د.ع",
                     ];
-
                 } else {
                     $absLiters = abs($diff);
-                    $results['negative'][]             = ['category' => $category->name, 'liters' => $absLiters];
-                    $results['total_negative_amount'] += $totalPrice;
+                    $absPrice = abs($totalPrice);
+                    $results['negative'][] = ['category' => $category->name, 'liters' => $absLiters, 'price' => $absPrice];
+                    $results['total_negative_amount'] += $absPrice;
                     $results['total_negative_liters'] += $absLiters;
-                    $results['details'][]              = [
-                        'type'          => 'negative',
-                        'category_id'   => $catId,
-                        'category_name' => $category->name,
-                        'liters'        => $absLiters,
-                        'total_price'   => $totalPrice,
-                        'message'       => "⚠️ {$category->name}: {$absLiters}L کەمتر فرۆشراوە، لە کۆگا دەمێنێتەوە",
+                    $results['details'][] = [
+                        'type'    => 'negative',
+                        'message' => "⚠️ {$category->name}: {$absLiters}L کەمتر - " . number_format($absPrice) . " د.ع",
                     ];
                 }
             }
@@ -469,25 +485,24 @@ class QuickSale extends Model
         }
     }
 
-    protected function recordSaleAndCash(
-        float $amount,
-        Category $category,
-        float $liters,
-        string $transactionType = 'quick_sale'
-    ): void {
+    /**
+     * تۆمارکردنی فرۆشتن و زیادکردنی پارە بۆ قاسە
+     */
+    protected function recordSaleAndCash(float $amount, Category $category, float $liters, string $transactionType = 'quick_sale'): void
+    {
         $cash = Cash::first() ?? Cash::create([
             'balance' => 0, 'total_income' => 0, 'total_expense' => 0,
             'capital' => 0, 'profit' => 0, 'last_update' => now(),
         ]);
 
-        $balanceBefore      = floatval($cash->balance);
-        $cash->balance      = $balanceBefore + $amount;
+        $balanceBefore = floatval($cash->balance);
+        $cash->balance = $balanceBefore + $amount;
         $cash->total_income = floatval($cash->total_income) + $amount;
-        $cash->last_update  = now();
+        $cash->last_update = now();
         $cash->save();
 
         $description = $transactionType === 'quick_sale_difference'
-            ? "جیاوازی فرۆشتن - {$liters}L {$category->name} - {$this->shift_name}"
+            ? "جیاوازی - {$liters}L {$category->name} - {$this->shift_name}"
             : "فرۆشتن - {$liters}L {$category->name} - {$this->shift_name}";
 
         $transaction = Transaction::create([
@@ -516,36 +531,39 @@ class QuickSale extends Model
         ]);
 
         $transaction->transactionable_type = Sale::class;
-        $transaction->transactionable_id   = $sale->id;
+        $transaction->transactionable_id = $sale->id;
         $transaction->save();
     }
 
+    /**
+     * دروستکردنی پەیامی کۆتایی
+     */
     protected function generateResultMessage(array $results): string
     {
         $lines = [];
 
         if ($results['total_sold_liters'] > 0) {
-            $lines[] = "✅ فرۆشتنی گشتی: " .
-                number_format($results['total_sold_liters']) . " لیتر - " .
-                number_format($results['total_sold_amount']) . " دینار زیاد کرا بۆ قاسە";
+            $lines[] = "✅ **فرۆشتنی گشتی:**";
+            $lines[] = "   - لیتر: " . number_format($results['total_sold_liters']) . " لیتر";
+            $lines[] = "   - پارە: " . number_format($results['total_sold_amount']) . " دینار";
         }
 
         foreach ($results['details'] as $detail) {
             if ($detail['type'] === 'sold') {
-                $lines[] = "   ✅ {$detail['liters']}L {$detail['category_name']} — " .
-                    number_format($detail['total_price']) . " دینار";
+                $lines[] = "   ✅ " . $detail['message'];
             }
         }
 
         if ($results['total_positive_liters'] > 0) {
-            $lines[] = "⚕ جیاوازی زیادە: " .
-                number_format($results['total_positive_liters']) . "L — " .
-                number_format($results['total_positive_amount']) . " دینار";
+            $lines[] = "⚕ **جیاوازی زیادە:**";
+            $lines[] = "   - لیتر: " . number_format($results['total_positive_liters']) . "L";
+            $lines[] = "   - پارە: " . number_format($results['total_positive_amount']) . " دینار";
         }
 
         if ($results['total_negative_liters'] > 0) {
-            $lines[] = "⚠️ کەمی فرۆشراو: " .
-                number_format($results['total_negative_liters']) . "L لە کۆگا دەمێنێتەوە";
+            $lines[] = "⚠️ **کەمی فرۆشراو:**";
+            $lines[] = "   - لیتر: " . number_format($results['total_negative_liters']) . "L";
+            $lines[] = "   - پارە: " . number_format($results['total_negative_amount']) . " دینار کەم دەبێتەوە";
         }
 
         return implode("\n", $lines);
