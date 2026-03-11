@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\CashResource\Pages;
 use App\Models\Cash;
+use App\Models\Transaction;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -24,184 +25,240 @@ use Filament\Infolists\Components\Grid;
 use Filament\Infolists\Components\Group;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Support\RawJs;
+use Illuminate\Support\HtmlString;
 
 class CashResource extends Resource
 {
     protected static ?string $model = Cash::class;
     protected static ?string $navigationIcon = 'heroicon-o-banknotes';
-    protected static ?string $navigationGroup = 'بەشی دارایی';
+    protected static ?string $navigationGroup = '🏦 بەشی دارایی';
     protected static ?string $modelLabel = 'قیاسەی دارایی';
     protected static ?string $pluralModelLabel = 'قیاسەی دارایی';
     protected static ?string $recordTitleAttribute = 'id';
     protected static ?string $slug = 'cash';
-
     protected static ?int $navigationSort = 1;
 
     /**
-     * فۆرمی بینینی وردەکاری
+     * فۆرمی بینینی وردەکاری - دیزاینی کارتی دارایی
      */
     public static function infolist(Infolist $infolist): Infolist
     {
         return $infolist
             ->schema([
-                Section::make('پوختەی دارایی')
-                    ->description('ڕەوشتی هەژماری دارایی لە ساتەی ئێستادا')
+                // بەشی سەرەکی - کارتی ڕەوشتی دارایی
+                Section::make('💳 کارتی ڕەوشتی دارایی')
+                    ->description(new HtmlString('
+                        <div class="text-sm text-gray-600">
+                            ⏱️ دوایین نوێکردنەوە: ' . now()->format('Y/m/d H:i') . '
+                        </div>
+                    '))
                     ->icon('heroicon-o-presentation-chart-line')
                     ->schema([
-                        Grid::make(3)
+                        // کارتی سەرەکی - وەک کارتی بانکی
+                        Grid::make(1)
                             ->schema([
                                 Group::make()
                                     ->schema([
                                         TextEntry::make('balance')
-                                            ->label('ڕەوشتی قاسە')
-                                            ->money('IQD')
-                                            ->size(TextEntry\TextEntrySize::Large)
-                                            ->weight('bold')
-                                            ->color('primary')
-                                            ->extraAttributes(['class' => 'text-2xl'])
-                                            ->formatStateUsing(function ($state) {
-                                                return self::formatMoneyDetailed($state);
-                                            }),
-                                        TextEntry::make('last_update')
-                                            ->label('دوایین نوێکردنەوە')
-                                            ->dateTime('Y/m/d H:i')
-                                            ->since()
-                                            ->color('gray'),
+                                            ->label('')
+                                            ->getStateUsing(function ($record) {
+                                                return self::formatCardBalance($record->balance);
+                                            })
+                                            ->extraAttributes(['class' => 'text-center']),
+                                    ])
+                                    ->extraAttributes([
+                                        'class' => 'bg-gradient-to-r from-blue-600 to-blue-800 text-white p-6 rounded-xl shadow-lg'
                                     ]),
+                            ]),
 
+                        // کارتی زانیاری ورد
+                        Grid::make(3)
+                            ->schema([
+                                // کارتی سەرمایە
                                 Group::make()
                                     ->schema([
                                         TextEntry::make('capital')
-                                            ->label('سەرمایەی سەرەتایی')
-                                            ->money('IQD')
-                                            ->weight('bold')
+                                            ->label('💰 سەرمایەی سەرەتایی')
+                                            ->getStateUsing(function ($record) {
+                                                return self::formatMoneyWithTooltip($record->capital, 'سەرمایەی دانراو لە سەرەتای کار');
+                                            })
                                             ->color('success')
-                                            ->formatStateUsing(function ($state) {
-                                                return self::formatMoneyDetailed($state);
-                                            }),
-                                        TextEntry::make('total_income')
-                                            ->label('کۆی گشتی داهات')
-                                            ->money('IQD')
-                                            ->color('success')
-                                            ->formatStateUsing(function ($state) {
-                                                return self::formatMoneyDetailed($state);
-                                            }),
-                                    ]),
+                                            ->size(TextEntry\TextEntrySize::Large),
 
+                                        TextEntry::make('capital_date')
+                                            ->label('ڕێکەوتی دانان')
+                                            ->getStateUsing(fn ($record) => $record->created_at->format('Y/m/d'))
+                                            ->color('gray'),
+                                    ])
+                                    ->extraAttributes(['class' => 'border border-green-200 rounded-lg p-4 bg-green-50']),
+
+                                // کارتی داهات
+                                Group::make()
+                                    ->schema([
+                                        TextEntry::make('total_income')
+                                            ->label('📈 کۆی داهات')
+                                            ->getStateUsing(function ($record) {
+                                                return self::formatMoneyWithTooltip($record->total_income, 'کۆی گشتی پارەی وەرگیراو لە فرۆشتن و سەرچاوەکانی تر');
+                                            })
+                                            ->color('success')
+                                            ->size(TextEntry\TextEntrySize::Large),
+
+                                        TextEntry::make('income_count')
+                                            ->label('ژمارەی مامەڵە')
+                                            ->getStateUsing(fn () => Transaction::whereIn('type', ['sale', 'income'])->count() . ' مامەڵە')
+                                            ->color('gray'),
+                                    ])
+                                    ->extraAttributes(['class' => 'border border-blue-200 rounded-lg p-4 bg-blue-50']),
+
+                                // کارتی خەرجی
+                                Group::make()
+                                    ->schema([
+                                        TextEntry::make('total_expense')
+                                            ->label('📉 کۆی خەرجی')
+                                            ->getStateUsing(function ($record) {
+                                                return self::formatMoneyWithTooltip($record->total_expense, 'کۆی گشتی پارەی بەکارهاتوو بۆ کڕین و خەرجییەکان');
+                                            })
+                                            ->color('danger')
+                                            ->size(TextEntry\TextEntrySize::Large),
+
+                                        TextEntry::make('expense_count')
+                                            ->label('ژمارەی مامەڵە')
+                                            ->getStateUsing(fn () => Transaction::whereIn('type', ['purchase', 'expense'])->count() . ' مامەڵە')
+                                            ->color('gray'),
+                                    ])
+                                    ->extraAttributes(['class' => 'border border-red-200 rounded-lg p-4 bg-red-50']),
+                            ]),
+
+                        // کارتی قازانج
+                        Grid::make(1)
+                            ->schema([
                                 Group::make()
                                     ->schema([
                                         TextEntry::make('profit')
-                                            ->label('قازانجی خاوێن')
-                                            ->money('IQD')
-                                            ->weight('bold')
-                                            ->color(fn ($record): string =>
-                                                $record->profit >= 0 ? 'success' : 'danger'
-                                            )
-                                            ->formatStateUsing(function ($state) {
-                                                $prefix = $state >= 0 ? '+' : '-';
-                                                return $prefix . ' ' . self::formatMoneyDetailed(abs($state));
-                                            }),
-                                        TextEntry::make('total_expense')
-                                            ->label('کۆی گشتی خەرجی')
-                                            ->money('IQD')
-                                            ->color('danger')
-                                            ->formatStateUsing(function ($state) {
-                                                return self::formatMoneyDetailed($state);
-                                            }),
-                                    ]),
+                                            ->label('💹 قازانجی خاوێن')
+                                            ->getStateUsing(function ($record) {
+                                                $profit = $record->profit;
+                                                $percentage = $record->capital > 0 ? round(($profit / $record->capital) * 100, 2) : 0;
+
+                                                $icon = $profit >= 0 ? '📈' : '📉';
+                                                $color = $profit >= 0 ? 'text-green-600' : 'text-red-600';
+
+                                                return new HtmlString("
+                                                    <div class='flex items-center justify-between'>
+                                                        <span class='text-2xl font-bold {$color}'>
+                                                            {$icon} " . number_format($profit) . " دینار
+                                                        </span>
+                                                        <span class='text-sm bg-gray-100 px-3 py-1 rounded-full'>
+                                                            ڕێژەی قازانج: {$percentage}%
+                                                        </span>
+                                                    </div>
+                                                ");
+                                            })
+                                            ->extraAttributes(['class' => 'w-full']),
+                                    ])
+                                    ->extraAttributes(['class' => 'border border-purple-200 rounded-lg p-6 bg-gradient-to-r from-purple-50 to-pink-50']),
                             ]),
                     ]),
 
-                Section::make('ڕێژە و ڕادارە داراییەکان')
-                    ->description('شیکردنەوەی دۆخی دارایی')
+                // بەشی دووەم - شیکردنەوەی دارایی
+                Section::make('📊 شیکردنەوەی دۆخی دارایی')
+                    ->description('ڕێژە و ڕادارە داراییەکان')
                     ->icon('heroicon-o-chart-pie')
                     ->schema([
                         Grid::make(4)
                             ->schema([
+                                // ڕێژەی قازانج
                                 Group::make()
                                     ->schema([
                                         TextEntry::make('profit_margin')
                                             ->label('ڕێژەی قازانج')
                                             ->getStateUsing(function ($record) {
-                                                if ($record->total_income == 0) return 0;
-                                                return ($record->profit / $record->total_income) * 100;
+                                                if ($record->total_income == 0) return '0%';
+                                                $margin = ($record->profit / $record->total_income) * 100;
+                                                return self::formatPercentage($margin);
                                             })
-                                            ->formatStateUsing(fn ($state) => number_format($state, 2) . '%')
-                                            ->color(fn ($state) => $state >= 20 ? 'success' : ($state >= 10 ? 'warning' : 'danger'))
-                                            ->icon(fn ($state) => $state >= 20 ? 'heroicon-o-arrow-trending-up' : 'heroicon-o-arrow-trending-down')
                                             ->extraAttributes(['class' => 'text-center']),
 
+                                        TextEntry::make('profit_margin_desc')
+                                            ->label('')
+                                            ->getStateUsing(function ($record) {
+                                                if ($record->total_income == 0) return 'هیچ فرۆشتنێک نییە';
+                                                $margin = ($record->profit / $record->total_income) * 100;
+                                                return self::getProfitDescription($margin);
+                                            })
+                                            ->color('gray')
+                                            ->size(TextEntry\TextEntrySize::Small),
+                                    ])
+                                    ->extraAttributes(['class' => 'border rounded-lg p-3']),
+
+                                // ڕێژەی خەرجی
+                                Group::make()
+                                    ->schema([
                                         TextEntry::make('expense_ratio')
                                             ->label('ڕێژەی خەرجی')
                                             ->getStateUsing(function ($record) {
-                                                if ($record->total_income == 0) return 100;
-                                                return ($record->total_expense / max($record->total_income, 1)) * 100;
-                                            })
-                                            ->formatStateUsing(fn ($state) => number_format($state, 2) . '%')
-                                            ->color(fn ($state) => $state <= 70 ? 'success' : 'danger'),
-                                    ]),
+                                                if ($record->total_income == 0) return '100%';
+                                                $ratio = ($record->total_expense / $record->total_income) * 100;
+                                                return self::formatPercentage($ratio);
+                                            }),
 
-                                Group::make()
-                                    ->schema([
-                                        TextEntry::make('capital_efficiency')
-                                            ->label('چالاکی سەرمایە')
-                                            ->getStateUsing(function ($record) {
-                                                if ($record->capital == 0) return 0;
-                                                return ($record->profit / $record->capital) * 100;
-                                            })
-                                            ->formatStateUsing(fn ($state) => number_format($state, 2) . '%')
-                                            ->color(fn ($state) => $state >= 15 ? 'success' : 'warning'),
-
-                                        TextEntry::make('roi')
-                                            ->label('گەڕانەوەی وەبەرهێنان (ROI)')
-                                            ->getStateUsing(function ($record) {
-                                                if ($record->capital == 0) return 0;
-                                                return (($record->balance - $record->capital) / $record->capital) * 100;
-                                            })
-                                            ->formatStateUsing(fn ($state) => number_format($state, 2) . '%')
-                                            ->color(fn ($state) => $state >= 0 ? 'success' : 'danger'),
-                                    ]),
-
-                                Group::make()
-                                    ->schema([
-                                        IconEntry::make('is_profitable')
-                                            ->label('دۆخی دارایی')
+                                        IconEntry::make('expense_status')
+                                            ->label('')
                                             ->boolean()
                                             ->trueIcon('heroicon-o-check-circle')
                                             ->falseIcon('heroicon-o-x-circle')
                                             ->trueColor('success')
                                             ->falseColor('danger')
-                                            ->getStateUsing(fn ($record) => $record->profit > 0),
+                                            ->getStateUsing(fn ($record) => $record->total_expense <= $record->total_income * 0.7),
+                                    ])
+                                    ->extraAttributes(['class' => 'border rounded-lg p-3']),
 
-                                        TextEntry::make('days_operating')
-                                            ->label('ماوەی کارکردن')
-                                            ->getStateUsing(fn ($record) => now()->diffInDays($record->created_at) . ' ڕۆژ'),
-                                    ]),
-
+                                // گەڕانەوەی سەرمایە
                                 Group::make()
                                     ->schema([
-                                        TextEntry::make('avg_daily_profit')
-                                            ->label('تێکڕای قازانجی ڕۆژانە')
+                                        TextEntry::make('roi')
+                                            ->label('گەڕانەوەی سەرمایە')
+                                            ->getStateUsing(function ($record) {
+                                                if ($record->capital == 0) return '0%';
+                                                $roi = (($record->balance - $record->capital) / $record->capital) * 100;
+                                                return self::formatPercentage($roi);
+                                            }),
+
+                                        TextEntry::make('roi_desc')
+                                            ->label('')
+                                            ->getStateUsing(function ($record) {
+                                                $profit = $record->balance - $record->capital;
+                                                return $profit >= 0 ? 'قازانج' : 'زیان';
+                                            })
+                                            ->color(fn ($record) => ($record->balance - $record->capital) >= 0 ? 'success' : 'danger'),
+                                    ])
+                                    ->extraAttributes(['class' => 'border rounded-lg p-3']),
+
+                                // ماوەی کارکردن
+                                Group::make()
+                                    ->schema([
+                                        TextEntry::make('operating_days')
+                                            ->label('ماوەی کارکردن')
+                                            ->getStateUsing(function ($record) {
+                                                $days = now()->diffInDays($record->created_at);
+                                                return $days . ' ڕۆژ';
+                                            }),
+
+                                        TextEntry::make('avg_daily')
+                                            ->label('تێکڕای ڕۆژانە')
                                             ->getStateUsing(function ($record) {
                                                 $days = max(now()->diffInDays($record->created_at), 1);
-                                                return $record->profit / $days;
-                                            })
-                                            ->formatStateUsing(fn ($state) => self::formatMoneyDetailed($state) . '/ڕۆژ'),
-
-                                        TextEntry::make('break_even_point')
-                                            ->label('خاڵی یەکسانبوون')
-                                            ->getStateUsing(function ($record) {
-                                                if ($record->profit >= 0) return 'گەیشتووە';
-                                                $dailyLoss = abs($record->profit) / max(now()->diffInDays($record->created_at), 1);
-                                                return 'پێویستی بە ' . number_format($dailyLoss, 0) . ' دینار/ڕۆژە';
-                                            })
-                                            ->color(fn ($record) => $record->profit >= 0 ? 'success' : 'danger'),
-                                    ]),
+                                                $avg = $record->profit / $days;
+                                                return number_format($avg) . ' د.ع/ڕۆژ';
+                                            }),
+                                    ])
+                                    ->extraAttributes(['class' => 'border rounded-lg p-3']),
                             ]),
                     ]),
 
-                Section::make('پێشبینی و ڕێنمایی')
-                    ->description('ڕێنمایی بۆ باشترکردنی دۆخی دارایی')
+                // بەشی سێیەم - ڕێنمایی و پێشنیار
+                Section::make('💡 ڕێنمایی و پێشنیار')
+                    ->description('چۆن دۆخی دارایی خۆت باشتر بکەیت')
                     ->icon('heroicon-o-light-bulb')
                     ->schema([
                         Grid::make(2)
@@ -209,44 +266,46 @@ class CashResource extends Resource
                                 Group::make()
                                     ->schema([
                                         TextEntry::make('advice')
-                                            ->label('ڕێنمایی')
+                                            ->label('')
                                             ->getStateUsing(function ($record) {
-                                                $advice = [];
-
-                                                if ($record->profit < 0) {
-                                                    $advice[] = '⚠️ کۆمپانیا لە زیاندا کاردەکات. پێویستە خەرجییەکان کەمبکەیتەوە.';
-                                                } elseif ($record->profit < $record->total_income * 0.1) {
-                                                    $advice[] = '⚠️ ڕێژەی قازانج کەمە. باشترە نرخی فرۆشتن زیاد بکەیت.';
-                                                } else {
-                                                    $advice[] = '✅ کۆمپانیا بە باشی کاردەکات. دەتوانیت سەرمایە زیاد بکەیت.';
-                                                }
-
-                                                if ($record->total_expense > $record->total_income * 0.7) {
-                                                    $advice[] = '⚠️ خەرجییەکان زۆرن. هەوڵبدە کەمیان بکەیتەوە.';
-                                                }
-
-                                                if ($record->capital == 0) {
-                                                    $advice[] = '💰 هیچ سەرمایەیەک دانەنراوە. باشترە سەرمایە دیاری بکەیت.';
-                                                }
-
-                                                return implode("\n", $advice);
+                                                return self::generateAdvice($record);
                                             })
                                             ->markdown()
-                                            ->extraAttributes(['class' => 'bg-gray-50 p-4 rounded-lg']),
+                                            ->extraAttributes(['class' => 'bg-gray-50 p-6 rounded-lg leading-relaxed']),
                                     ]),
 
                                 Group::make()
                                     ->schema([
-                                        TextEntry::make('forecast')
-                                            ->label('پێشبینی مانگی داهاتوو')
+                                        TextEntry::make('quick_stats')
+                                            ->label('ئامارە خێراکان')
                                             ->getStateUsing(function ($record) {
-                                                $days = max(now()->diffInDays($record->created_at), 1);
-                                                $dailyProfit = $record->profit / $days;
-                                                $monthlyForecast = $dailyProfit * 30;
+                                                $totalTransactions = Transaction::count();
+                                                $todayTransactions = Transaction::whereDate('created_at', today())->count();
 
-                                                return "قازانجی پێشبینی کراو: " . self::formatMoneyDetailed($monthlyForecast);
+                                                return new HtmlString("
+                                                    <div class='space-y-2'>
+                                                        <div class='flex justify-between border-b pb-2'>
+                                                            <span>📊 کۆی مامەڵەکان:</span>
+                                                            <span class='font-bold'>{$totalTransactions}</span>
+                                                        </div>
+                                                        <div class='flex justify-between border-b pb-2'>
+                                                            <span>📅 مامەڵەی ئەمڕۆ:</span>
+                                                            <span class='font-bold'>{$todayTransactions}</span>
+                                                        </div>
+                                                        <div class='flex justify-between border-b pb-2'>
+                                                            <span>💰 ڕەوشتی قاسە:</span>
+                                                            <span class='font-bold text-primary-600'>" . number_format($record->balance) . " د.ع</span>
+                                                        </div>
+                                                        <div class='flex justify-between'>
+                                                            <span>📈 قازانج:</span>
+                                                            <span class='font-bold " . ($record->profit >= 0 ? 'text-success-600' : 'text-danger-600') . "'>
+                                                                " . number_format($record->profit) . " د.ع
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                ");
                                             })
-                                            ->extraAttributes(['class' => 'bg-blue-50 p-4 rounded-lg']),
+                                            ->extraAttributes(['class' => 'bg-blue-50 p-6 rounded-lg']),
                                     ]),
                             ]),
                     ]),
@@ -260,201 +319,231 @@ class CashResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\Section::make('زانیاری گشتی')
-                    ->description('ڕەوشتی هەژماری دارایی')
+                Forms\Components\Section::make('📝 زانیاری گشتی')
+                    ->description('پوختەی ڕەوشتی دارایی')
                     ->icon('heroicon-o-information-circle')
                     ->schema([
                         Forms\Components\Grid::make(3)
                             ->schema([
                                 Forms\Components\TextInput::make('balance')
-                                    ->label('ڕەوشتی قاسە')
+                                    ->label('💰 ڕەوشتی قاسە')
                                     ->numeric()
                                     ->prefix('دینار')
                                     ->disabled()
                                     ->default(0)
                                     ->mask(RawJs::make('$money($input)'))
-                                    ->extraAttributes(['class' => 'text-primary-600 font-bold text-lg']),
+                                    ->helperText('ئەم بڕە نوێ دەکرێتەوە کاتێک فرۆشتن یان خەرجی تۆمار دەکەیت')
+                                    ->extraAttributes(['class' => 'text-primary-600 font-bold']),
 
                                 Forms\Components\TextInput::make('capital')
-                                    ->label('سەرمایە')
+                                    ->label('🏦 سەرمایە')
                                     ->numeric()
                                     ->prefix('دینار')
                                     ->disabled()
                                     ->default(0)
                                     ->mask(RawJs::make('$money($input)'))
-                                    ->extraAttributes(['class' => 'text-success-600 font-bold text-lg']),
+                                    ->helperText('سەرمایەی سەرەتایی کاتێک دەستت بە کار کردووە')
+                                    ->extraAttributes(['class' => 'text-success-600 font-bold']),
 
                                 Forms\Components\TextInput::make('profit')
-                                    ->label('قازانجی خاوێن')
+                                    ->label('📊 قازانج')
                                     ->numeric()
                                     ->prefix('دینار')
                                     ->disabled()
                                     ->default(0)
                                     ->mask(RawJs::make('$money($input)'))
-                                    ->extraAttributes(['class' => 'text-warning-600 font-bold text-lg']),
+                                    ->helperText('داهات - خەرجی = قازانجی خاوێن')
+                                    ->extraAttributes(['class' => 'text-warning-600 font-bold']),
                             ]),
-                    ]),
 
-                Forms\Components\Section::make('پوختەی دارایی')
-                    ->description('کۆی داهات و خەرجییەکان')
-                    ->icon('heroicon-o-chart-bar')
-                    ->schema([
                         Forms\Components\Grid::make(2)
                             ->schema([
                                 Forms\Components\TextInput::make('total_income')
-                                    ->label('کۆی گشتی داهات')
+                                    ->label('📈 کۆی داهات')
                                     ->numeric()
                                     ->disabled()
                                     ->prefix('دینار')
-                                    ->mask(RawJs::make('$money($input)'))
-                                    ->extraAttributes(['class' => 'text-success-600']),
+                                    ->helperText('کۆی گشتی پارەی وەرگیراو لە فرۆشتنەکان')
+                                    ->mask(RawJs::make('$money($input)')),
 
                                 Forms\Components\TextInput::make('total_expense')
-                                    ->label('کۆی گشتی خەرجی')
+                                    ->label('📉 کۆی خەرجی')
                                     ->numeric()
                                     ->disabled()
                                     ->prefix('دینار')
-                                    ->mask(RawJs::make('$money($input)'))
-                                    ->extraAttributes(['class' => 'text-danger-600']),
+                                    ->helperText('کۆی گشتی پارەی بەکارهاتوو بۆ کڕین و خەرجی')
+                                    ->mask(RawJs::make('$money($input)')),
                             ]),
 
-                        Forms\Components\DatePicker::make('last_update')
-                            ->label('دوایین نوێکردنەوە')
+                        Forms\Components\DateTimePicker::make('last_update')
+                            ->label('⏱️ دوایین نوێکردنەوە')
                             ->disabled()
-                            ->extraAttributes(['class' => 'text-gray-500']),
-                    ])->columns(2),
+                            ->helperText('کاتی دوایین گۆڕانکاری لە قاسە')
+                            ->displayFormat('Y/m/d H:i'),
+                    ]),
             ]);
     }
 
     /**
-     * خشتەی نیشاندان
+     * خشتەی نیشاندان - دیزاینی کارتی
      */
     public static function table(Table $table): Table
     {
         return $table
             ->columns([
                 Tables\Columns\Layout\Split::make([
+                    // بەشی ڕاست - کارتی سەرەکی
                     Tables\Columns\Layout\Stack::make([
-                        Tables\Columns\TextColumn::make('balance')
-                            ->label('ڕەوشتی قاسە')
-                            ->size(Tables\Columns\TextColumn\TextColumnSize::Large)
-                            ->weight('bold')
-                            ->color('primary')
-                            ->formatStateUsing(function ($state) {
-                                return self::formatMoneyWithIcon($state, 'cash');
-                            }),
-
-                        Tables\Columns\TextColumn::make('last_update')
-                            ->label('دوایین نوێکردنەوە')
-                            ->formatStateUsing(function ($state) {
-                                return self::formatLastUpdate($state);
+                        Tables\Columns\TextColumn::make('card_view')
+                            ->label('')
+                            ->getStateUsing(function ($record) {
+                                return self::formatCardPreview($record);
                             })
-                            ->size(Tables\Columns\TextColumn\TextColumnSize::ExtraSmall)
-                            ->color('gray'),
+                            ->html(),
                     ]),
 
+                    // بەشی چەپ - زانیاری خێرا
                     Tables\Columns\Layout\Stack::make([
-                        Tables\Columns\TextColumn::make('capital')
-                            ->label('سەرمایە')
-                            ->weight('bold')
-                            ->color('success')
-                            ->formatStateUsing(function ($state) {
-                                return self::formatMoneyWithIcon($state, 'capital');
-                            }),
+                        Tables\Columns\TextColumn::make('quick_info')
+                            ->label('')
+                            ->getStateUsing(function ($record) {
+                                $profitColor = $record->profit >= 0 ? 'text-success-600' : 'text-danger-600';
+                                $profitIcon = $record->profit >= 0 ? '↑' : '↓';
 
-                        Tables\Columns\TextColumn::make('profit')
-                            ->label('قازانج')
-                            ->weight('bold')
-                            ->color(fn ($record): string => $record->profit >= 0 ? 'success' : 'danger')
-                            ->formatStateUsing(function ($state) {
-                                return self::formatMoneyWithIcon($state, 'profit');
-                            }),
-                    ]),
-
-                    Tables\Columns\Layout\Stack::make([
-                        Tables\Columns\TextColumn::make('total_income')
-                            ->label('داهات')
-                            ->color('success')
-                            ->formatStateUsing(function ($state) {
-                                return self::formatMoneyWithIcon($state, 'income');
-                            }),
-
-                        Tables\Columns\TextColumn::make('total_expense')
-                            ->label('خەرجی')
-                            ->color('danger')
-                            ->formatStateUsing(function ($state) {
-                                return self::formatMoneyWithIcon($state, 'expense');
-                            }),
+                                return new HtmlString("
+                                    <div class='space-y-1 text-sm'>
+                                        <div class='flex justify-between'>
+                                            <span class='text-gray-600'>💰 قاسە:</span>
+                                            <span class='font-bold text-primary-600'>" . number_format($record->balance) . "</span>
+                                        </div>
+                                        <div class='flex justify-between'>
+                                            <span class='text-gray-600'>🏦 سەرمایە:</span>
+                                            <span class='font-bold text-success-600'>" . number_format($record->capital) . "</span>
+                                        </div>
+                                        <div class='flex justify-between'>
+                                            <span class='text-gray-600'>📊 قازانج:</span>
+                                            <span class='font-bold {$profitColor}'>
+                                                {$profitIcon} " . number_format(abs($record->profit)) . "
+                                            </span>
+                                        </div>
+                                    </div>
+                                ");
+                            })
+                            ->html(),
                     ]),
                 ])->from('md'),
             ])
-            ->filters([
-                Filter::make('balance_range')
-                    ->form([
-                        Forms\Components\TextInput::make('min_balance')
-                            ->label('کەمترین بڕ')
-                            ->numeric()
-                            ->prefix('دینار')
-                            ->placeholder('١٠٠،٠٠٠')
-                            ->mask(RawJs::make('$money($input)')),
-                        Forms\Components\TextInput::make('max_balance')
-                            ->label('زۆرترین بڕ')
-                            ->numeric()
-                            ->prefix('دینار')
-                            ->placeholder('١،٠٠٠،٠٠٠')
-                            ->mask(RawJs::make('$money($input)')),
-                    ])
-                    ->indicateUsing(function (array $data): ?string {
-                        $indicators = [];
-                        if ($data['min_balance'] ?? null) {
-                            $indicators[] = '≥ ' . number_format($data['min_balance']) . ' د.ع';
-                        }
-                        if ($data['max_balance'] ?? null) {
-                            $indicators[] = '≤ ' . number_format($data['max_balance']) . ' د.ع';
-                        }
-                        return $indicators ? 'بڕی پارە: ' . implode(' و ', $indicators) : null;
-                    }),
+// لە بری ئەوەی هەڵەکەت هەیبوو، ئەم کۆدە دابنێ
+->filters([
+    Filter::make('balance_range')
+        ->label('پێوەری بڕی پارە')
+        ->form([
+            Forms\Components\TextInput::make('min_balance')
+                ->label('کەمترین')
+                ->numeric()
+                ->prefix('دینار')
+                ->placeholder('١٠٠،٠٠٠')
+                ->mask(RawJs::make('$money($input)')),
+            Forms\Components\TextInput::make('max_balance')
+                ->label('زۆرترین')
+                ->numeric()
+                ->prefix('دینار')
+                ->placeholder('١،٠٠٠،٠٠٠')
+                ->mask(RawJs::make('$money($input)')),
+        ])
+        ->query(function ($query, array $data) {
+            return $query
+                ->when($data['min_balance'] ?? null, fn ($q, $value) => $q->where('balance', '>=', $value))
+                ->when($data['max_balance'] ?? null, fn ($q, $value) => $q->where('balance', '<=', $value));
+        })
+        ->indicateUsing(function (array $data) {
+            $indicators = [];
+            if ($data['min_balance'] ?? null) {
+                $indicators[] = '≥ ' . number_format($data['min_balance']) . ' د.ع';
+            }
+            if ($data['max_balance'] ?? null) {
+                $indicators[] = '≤ ' . number_format($data['max_balance']) . ' د.ع';
+            }
+            return $indicators ? 'بڕی پارە: ' . implode(' و ', $indicators) : null;
+        }),
 
-                Filter::make('date_range')
-                    ->form([
-                        DatePicker::make('from_date')
-                            ->label('لە ڕێکەوتی')
-                            ->placeholder('YYYY-MM-DD'),
-                        DatePicker::make('to_date')
-                            ->label('تا ڕێکەوتی')
-                            ->placeholder('YYYY-MM-DD'),
-                    ])
-                    ->query(function ($query, array $data) {
-                        return $query
-                            ->when($data['from_date'], fn ($q) => $q->whereDate('last_update', '>=', $data['from_date']))
-                            ->when($data['to_date'], fn ($q) => $q->whereDate('last_update', '<=', $data['to_date']));
-                    }),
+    // **ئەم بەشە چاککراوە** - بەکارهێنانی Forms\Components\Select
+    Filter::make('profit_status')
+        ->label('ڕەوشتی قازانج')
+        ->form([
+            Forms\Components\Select::make('value')
+                ->label('ڕەوشت')
+                ->options([
+                    'profitable' => '💰 قازانج',
+                    'loss' => '📉 زیان',
+                    'break_even' => '⚖️ یەکسان',
+                ])
+                ->placeholder('هەموو')
+        ])
+        ->query(function ($query, array $data) {
+            if (empty($data['value'])) return $query;
 
-                SelectFilter::make('profit_status')
-                    ->label('ڕەوشتی قازانج')
-                    ->options([
-                        'high_profit' => 'قازانجی زۆر (> ١ ملیۆن)',
-                        'medium_profit' => 'قازانجی مامناوەند (١٠٠ هەزار - ١ ملیۆن)',
-                        'low_profit' => 'قازانجی کەم (٠ - ١٠٠ هەزار)',
-                        'loss' => 'زیان',
-                    ])
-                    ->query(function ($query, array $data) {
-                        return match($data['value'] ?? null) {
-                            'high_profit' => $query->where('profit', '>', 1000000),
-                            'medium_profit' => $query->whereBetween('profit', [100000, 1000000]),
-                            'low_profit' => $query->whereBetween('profit', [0, 100000]),
-                            'loss' => $query->where('profit', '<', 0),
-                            default => $query,
-                        };
-                    }),
-            ])
+            return match($data['value']) {
+                'profitable' => $query->where('profit', '>', 0),
+                'loss' => $query->where('profit', '<', 0),
+                'break_even' => $query->where('profit', 0),
+                default => $query,
+            };
+        })
+        ->indicateUsing(function (array $data) {
+            if (empty($data['value'])) return null;
+
+            $labels = [
+                'profitable' => '💰 قازانج',
+                'loss' => '📉 زیان',
+                'break_even' => '⚖️ یەکسان',
+            ];
+
+            return 'ڕەوشتی قازانج: ' . ($labels[$data['value']] ?? $data['value']);
+        }),
+
+    Filter::make('date_range')
+        ->label('مەودای کاتی')
+        ->form([
+            Forms\Components\DatePicker::make('from_date')
+                ->label('لە')
+                ->placeholder('YYYY-MM-DD'),
+            Forms\Components\DatePicker::make('to_date')
+                ->label('تا')
+                ->placeholder('YYYY-MM-DD'),
+        ])
+        ->query(function ($query, array $data) {
+            return $query
+                ->when($data['from_date'] ?? null, fn ($q, $date) => $q->whereDate('last_update', '>=', $date))
+                ->when($data['to_date'] ?? null, fn ($q, $date) => $q->whereDate('last_update', '<=', $date));
+        })
+        ->indicateUsing(function (array $data) {
+            $indicators = [];
+            if ($data['from_date'] ?? null) {
+                $indicators[] = 'لە ' . \Carbon\Carbon::parse($data['from_date'])->format('Y/m/d');
+            }
+            if ($data['to_date'] ?? null) {
+                $indicators[] = 'تا ' . \Carbon\Carbon::parse($data['to_date'])->format('Y/m/d');
+            }
+            return $indicators ? 'مەودای کاتی: ' . implode(' - ', $indicators) : null;
+        }),
+    ])
+
+
             ->filtersLayout(Tables\Enums\FiltersLayout::Modal)
             ->persistFiltersInSession()
+            ->filtersTriggerAction(
+                fn ($action) => $action
+                    ->button()
+                    ->label('فلتەر')
+                    ->icon('heroicon-m-funnel')
+                    ->color('gray')
+            )
 
             ->headerActions([
                 ActionGroup::make([
                     Action::make('add_capital')
-                        ->label('زیادکردنی سەرمایە')
+                        ->label('➕ زیادکردنی سەرمایە')
                         ->icon('heroicon-o-banknotes')
                         ->color(Color::Green)
                         ->form([
@@ -465,165 +554,137 @@ class CashResource extends Resource
                                 ->prefix('دینار')
                                 ->minValue(1000)
                                 ->mask(RawJs::make('$money($input)'))
-                                ->autofocus()
-                                ->helperText('ئەم بڕە وەک سەرمایەی سەرەتایی زیاد دەکرێت'),
+                                ->helperText('ئەم بڕە وەک سەرمایەی زیادە دادەنرێت'),
 
                             Forms\Components\Textarea::make('description')
                                 ->label('تێبینی')
-                                ->placeholder('نموونە: زیادکردنی سەرمایەی نوێ بۆ فراوانکردنی کار')
-                                ->maxLength(255)
-                                ->columnSpanFull(),
+                                ->placeholder('نموونە: زیادکردنی سەرمایە بۆ فراوانکردنی کار')
+                                ->required()
+                                ->maxLength(255),
 
                             Forms\Components\DatePicker::make('date')
-                                ->label('ڕێکەوتی زیادکردن')
+                                ->label('ڕێکەوت')
                                 ->default(now())
                                 ->required(),
                         ])
-                        ->action(function (array $data, $livewire): void {
+                        ->action(function (array $data) {
                             $cash = Cash::first() ?? Cash::initialize(0, 0);
-
-                            $cash->addCapital($data['amount'], $data['description'] ?? null, $data['date']);
-                            $cash->calculateProfit();
+                            $cash->addCapital($data['amount'], $data['description'], $data['date']);
 
                             Notification::make()
-                                ->title('سەرمایە زیاد کرا')
-                                ->body(number_format($data['amount']) . ' دینار وەک سەرمایە زیاد کرا')
+                                ->title('✅ سەرمایە زیاد کرا')
+                                ->body(self::formatSuccessMessage('capital_added', $data['amount']))
                                 ->success()
                                 ->send();
                         })
                         ->modalHeading('زیادکردنی سەرمایە')
-                        ->modalDescription('بڕی سەرمایەی نوێ داخڵ بکە')
-                        ->modalIcon('heroicon-o-banknotes')
-                        ->modalSubmitActionLabel('زیادکردن')
-                        ->modalCancelActionLabel('پاشگەزبوونەوە'),
+                        ->modalDescription(new HtmlString('
+                            <div class="text-sm text-gray-600">
+                                <p>⚠️ <strong>تێبینی:</strong> ئەم کردارە ڕاستەوخۆ سەرمایەی کۆمپانیا زیاد دەکات.</p>
+                                <p class="mt-1">💰 سەرمایەی ئێستا: ' . number_format(optional(Cash::first())->capital ?? 0) . ' دینار</p>
+                            </div>
+                        '))
+                        ->modalIcon('heroicon-o-banknotes'),
 
-                         Action::make('withdraw_capital')
-            ->label('کەمکردنەوەی سەرمایە')
-            ->icon('heroicon-o-arrow-trending-down')
-            ->color(Color::Red)
-            ->form([
-                Forms\Components\TextInput::make('amount')
-                    ->label('بڕی سەرمایە')
-                    ->numeric()
-                    ->required()
-                    ->prefix('دینار')
-                    ->minValue(1000)
-                    ->mask(RawJs::make('$money($input)'))
-                    ->helperText(fn () => 'سەرمایەی بوونی: ' . optional(Cash::first())->formatted_capital ?? '0 دینار')
-                    ->rule(function () {
-                        $cash = Cash::first();
-                        return $cash ? 'max:' . $cash->capital : 'max:0';
-                    }),
+                    Action::make('withdraw_capital')
+                        ->label('➖ کەمکردنەوەی سەرمایە')
+                        ->icon('heroicon-o-arrow-trending-down')
+                        ->color(Color::Red)
+                        ->form([
+                            Forms\Components\TextInput::make('amount')
+                                ->label('بڕی سەرمایە')
+                                ->numeric()
+                                ->required()
+                                ->prefix('دینار')
+                                ->minValue(1000)
+                                ->mask(RawJs::make('$money($input)'))
+                                ->helperText('سەرمایەی بوونی: ' . number_format(optional(Cash::first())->capital ?? 0) . ' دینار')
+                                ->rule(fn () => 'max:' . (optional(Cash::first())->capital ?? 0)),
 
-                Forms\Components\Select::make('reason')
-                    ->label('هۆکاری کەمکردنەوە')
-                    ->options([
-                        'withdraw' => 'وەرگرتنی قازانج',
-                        'loss' => 'زیان',
-                        'investment' => 'وەبەرهێنانی تر',
-                        'personal' => 'پێویستی کەسی',
-                        'other' => 'هۆکاری تر',
-                    ])
-                    ->required(),
+                            Forms\Components\Select::make('reason')
+                                ->label('هۆکار')
+                                ->options([
+                                    'withdraw' => '💸 وەرگرتنی قازانج',
+                                    'loss' => '📉 زیان',
+                                    'investment' => '📈 وەبەرهێنانی تر',
+                                    'personal' => '👤 پێویستی کەسی',
+                                    'other' => '🔄 هۆکاری تر',
+                                ])
+                                ->required(),
 
-                Forms\Components\Textarea::make('description')
-                    ->label('وەسف')
-                    ->required()
-                    ->placeholder('نموونە: وەرگرتنی قازانج بۆ خاوەن پشک')
-                    ->maxLength(255)
-                    ->columnSpanFull(),
+                            Forms\Components\Textarea::make('description')
+                                ->label('وەسف')
+                                ->required()
+                                ->placeholder('نموونە: وەرگرتنی قازانج بۆ خاوەن پشک')
+                                ->maxLength(255),
 
-                Forms\Components\DatePicker::make('date')
-                    ->label('ڕێکەوتی کەمکردنەوە')
-                    ->default(now())
-                    ->required(),
+                            Forms\Components\Toggle::make('confirm')
+                                ->label('دڵنیام لە کەمکردنەوەی سەرمایە')
+                                ->required()
+                                ->helperText('ئەم کردارە سەرمایەی کۆمپانیا کەم دەکاتەوە'),
+                        ])
+                        ->action(function (array $data) {
+                            $cash = Cash::first();
 
-                Forms\Components\Toggle::make('confirm')
-                    ->label('دڵنیام لە کەمکردنەوەی سەرمایە')
-                    ->required()
-                    ->helperText('ئەم کردارە سەرمایەی کۆمپانیا کەم دەکاتەوە'),
-            ])
-            ->action(function (array $data, $livewire): void {
-                $cash = Cash::first();
+                            if (!$cash || $cash->capital < $data['amount']) {
+                                Notification::make()
+                                    ->title('❌ هەڵە!')
+                                    ->body('سەرمایەی پێویست بوونی نییە')
+                                    ->danger()
+                                    ->send();
+                                return;
+                            }
 
-                if (!$cash) {
-                    Notification::make()
-                        ->title('هەڵە!')
-                        ->body('قیاسەی دارایی بوونی نییە')
-                        ->danger()
-                        ->send();
-                    return;
-                }
+                            $reasonText = match($data['reason']) {
+                                'withdraw' => 'وەرگرتنی قازانج',
+                                'loss' => 'زیان',
+                                'investment' => 'وەبەرهێنانی تر',
+                                'personal' => 'پێویستی کەسی',
+                                default => 'هۆکاری تر',
+                            };
 
-                try {
-                    // دڵنیابوونەوە لە بڕی سەرمایە
-                    if ($cash->capital < $data['amount']) {
-                        throw new \Exception('سەرمایەی پێویست بوونی نییە');
-                    }
+                            $description = $reasonText . ' - ' . $data['description'];
+                            $cash->withdrawCapital($data['amount'], $description, now());
 
-                    // دروستکردنی وەسف
-                    $reasonText = match($data['reason']) {
-                        'withdraw' => 'وەرگرتنی قازانج',
-                        'loss' => 'زیانی کۆمپانیا',
-                        'investment' => 'وەبەرهێنانی تر',
-                        'personal' => 'پێویستی کەسی',
-                        default => 'هۆکاری تر',
-                    };
+                            Notification::make()
+                                ->title('✅ سەرمایە کەم کرایەوە')
+                                ->body(self::formatSuccessMessage('capital_withdrawn', $data['amount']))
+                                ->success()
+                                ->send();
+                        })
+                        ->modalHeading('کەمکردنەوەی سەرمایە')
+                        ->modalDescription(new HtmlString('
+                            <div class="text-sm text-red-600">
+                                <p>⚠️ <strong>ئاگادار:</strong> کەمکردنەوەی سەرمایە کاریگەری لەسەر قازانج دەبێت!</p>
+                            </div>
+                        '))
+                        ->visible(fn () => optional(Cash::first())->capital > 0),
 
-                    $description = $reasonText . ' - ' . $data['description'];
-
-                    // کەمکردنەوەی سەرمایە
-                    $cash->withdrawCapital($data['amount'], $description, $data['date']);
-                    $cash->calculateProfit();
-
-                    Notification::make()
-                        ->title('✅ سەرمایە کەم کرایەوە')
-                        ->body(number_format($data['amount']) . ' دینار لە سەرمایە کەم کرایەوە')
-                        ->success()
-                        ->send();
-
-                } catch (\Exception $e) {
-                    Notification::make()
-                        ->title('هەڵە!')
-                        ->body($e->getMessage())
-                        ->danger()
-                        ->send();
-                }
-            })
-            ->modalHeading('کەمکردنەوەی سەرمایە')
-            ->modalDescription('دڵنیابە لە بڕی کەمکردنەوە')
-            ->modalIcon('heroicon-o-exclamation-triangle')
-            ->modalSubmitActionLabel('کەمکردنەوە')
-            ->modalCancelActionLabel('پاشگەزبوونەوە')
-            ->visible(fn (): bool => optional(Cash::first())->capital > 0),
-
-
-                    Action::make('view_report')
-                        ->label('ڕاپۆرتی دارایی')
-                        ->icon('heroicon-o-document-chart-bar')
+                    Action::make('view_transactions')
+                        ->label('📋 بینینی مامەڵەکان')
+                        ->icon('heroicon-o-document-text')
                         ->color(Color::Blue)
                         ->url(fn (): string => route('filament.admin.resources.transactions.index'))
                         ->openUrlInNewTab(),
 
-                    Action::make('export_data')
-                        ->label('هەناردەکردن')
+                    Action::make('export_report')
+                        ->label('📥 هەناردەی ڕاپۆرت')
                         ->icon('heroicon-o-arrow-down-tray')
                         ->color(Color::Gray)
-                        ->action(function ($livewire) {
-                            // کۆدی هەناردەکردن لێرەدا
+                        ->action(function () {
                             Notification::make()
                                 ->title('ئەم تایبەتمەندییە لە بەردەستدایە')
                                 ->warning()
                                 ->send();
                         }),
                 ])
-                ->label('بەڕێوەبردنی دارایی')
+                ->label('🔧 بەڕێوەبردنی دارایی')
                 ->icon('heroicon-o-currency-dollar')
                 ->color(Color::Purple)
                 ->button(),
 
-                Action::make('add_money')
-                    ->label('زیادکردنی پارە')
+                Action::make('quick_add')
+                    ->label('➕ زیادکردنی پارە')
                     ->icon('heroicon-o-plus-circle')
                     ->color(Color::Orange)
                     ->form([
@@ -633,51 +694,46 @@ class CashResource extends Resource
                             ->required()
                             ->prefix('دینار')
                             ->minValue(1000)
-                            ->mask(RawJs::make('$money($input)'))
-                            ->autofocus(),
+                            ->mask(RawJs::make('$money($input)')),
 
                         Forms\Components\Select::make('source')
-                            ->label('سەرچاوەی پارە')
+                            ->label('سەرچاوە')
                             ->options([
-                                'bank' => 'وەرگرتن لە بانک',
-                                'profit' => 'قازانجی فرۆشتن',
-                                'other' => 'سەرچاوەی تر',
+                                'bank' => '🏦 وەرگرتن لە بانک',
+                                'profit' => '💹 قازانج',
+                                'other' => '🔄 سەرچاوەی تر',
                             ])
                             ->required(),
 
                         Forms\Components\Textarea::make('description')
                             ->label('تێبینی')
-                            ->placeholder('نموونە: زیادکردنی پارە لە بانک')
+                            ->placeholder('نموونە: وەرگرتنی پارە لە بانک')
+                            ->required()
                             ->maxLength(255),
-
-                        Forms\Components\DatePicker::make('date')
-                            ->label('ڕێکەوت')
-                            ->default(now())
-                            ->required(),
                     ])
-                    ->action(function (array $data, $livewire): void {
+                    ->action(function (array $data) {
                         $cash = Cash::first() ?? Cash::initialize(0, 0);
 
-                        $description = $data['description'] ?? '';
-                        if ($data['source'] === 'bank') {
-                            $description = 'وەرگرتن لە بانک - ' . $description;
-                        } elseif ($data['source'] === 'profit') {
-                            $description = 'قازانجی فرۆشتن - ' . $description;
-                        }
+                        $sourceText = match($data['source']) {
+                            'bank' => 'وەرگرتن لە بانک',
+                            'profit' => 'قازانج',
+                            default => 'سەرچاوەی تر',
+                        };
 
-                        $cash->addMoney($data['amount'], $description, $data['date']);
-                        $cash->calculateProfit();
+                        $description = $sourceText . ' - ' . $data['description'];
+                        $cash->addMoney($data['amount'], $description, now());
 
                         Notification::make()
-                            ->title('پارە زیاد کرا')
+                            ->title('✅ پارە زیاد کرا')
+                            ->body(self::formatSuccessMessage('money_added', $data['amount']))
                             ->success()
                             ->send();
                     })
                     ->modalHeading('زیادکردنی پارە بۆ قاسە')
                     ->modalIcon('heroicon-o-plus-circle'),
 
-                Action::make('withdraw_money')
-                    ->label('کەمکردنەوەی پارە')
+                Action::make('quick_withdraw')
+                    ->label('➖ کەمکردنەوەی پارە')
                     ->icon('heroicon-o-minus-circle')
                     ->color(Color::Red)
                     ->form([
@@ -687,14 +743,15 @@ class CashResource extends Resource
                             ->required()
                             ->prefix('دینار')
                             ->minValue(1000)
-                            ->mask(RawJs::make('$money($input)')),
+                            ->mask(RawJs::make('$money($input)'))
+                            ->rule(fn () => 'max:' . (optional(Cash::first())->balance ?? 0)),
 
                         Forms\Components\Select::make('reason')
                             ->label('هۆکار')
                             ->options([
-                                'bank' => 'گواستنەوە بۆ بانک',
-                                'withdraw' => 'وەرگرتنی قازانج',
-                                'other' => 'هۆکاری تر',
+                                'bank' => '🏦 گواستنەوە بۆ بانک',
+                                'withdraw' => '💸 وەرگرتن',
+                                'other' => '🔄 هۆکاری تر',
                             ])
                             ->required(),
 
@@ -703,61 +760,48 @@ class CashResource extends Resource
                             ->required()
                             ->placeholder('نموونە: گواستنەوە بۆ بانک')
                             ->maxLength(255),
-
-                        Forms\Components\DatePicker::make('date')
-                            ->label('ڕێکەوت')
-                            ->default(now())
-                            ->required(),
                     ])
-                    ->action(function (array $data, $livewire): void {
+                    ->action(function (array $data) {
                         $cash = Cash::first();
 
                         if (!$cash) {
                             Notification::make()
-                                ->title('هەڵە!')
-                                ->body('قاسە بوونی نییە')
+                                ->title('❌ هەڵە!')
+                                ->body('قیاسەی دارایی بوونی نییە')
                                 ->danger()
                                 ->send();
                             return;
                         }
 
-                        try {
-                            $description = $data['description'] ?? '';
-                            if ($data['reason'] === 'bank') {
-                                $description = 'گواستنەوە بۆ بانک - ' . $description;
-                            } elseif ($data['reason'] === 'withdraw') {
-                                $description = 'وەرگرتنی قازانج - ' . $description;
-                            }
+                        $reasonText = match($data['reason']) {
+                            'bank' => 'گواستنەوە بۆ بانک',
+                            'withdraw' => 'وەرگرتن',
+                            default => 'هۆکاری تر',
+                        };
 
-                            $cash->withdrawMoney($data['amount'], $description, $data['date']);
-                            $cash->calculateProfit();
+                        $description = $reasonText . ' - ' . $data['description'];
+                        $cash->withdrawMoney($data['amount'], $description, now());
 
-                            Notification::make()
-                                ->title('پارە کەم کرایەوە')
-                                ->success()
-                                ->send();
-                        } catch (\Exception $e) {
-                            Notification::make()
-                                ->title('هەڵە!')
-                                ->body($e->getMessage())
-                                ->danger()
-                                ->send();
-                        }
+                        Notification::make()
+                            ->title('✅ پارە کەم کرایەوە')
+                            ->body(self::formatSuccessMessage('money_withdrawn', $data['amount']))
+                            ->success()
+                            ->send();
                     })
                     ->modalHeading('کەمکردنەوەی پارە لە قاسە')
                     ->modalIcon('heroicon-o-minus-circle')
-                    ->visible(fn (): bool => optional(Cash::first())->balance > 0 ?? false),
+                    ->visible(fn () => optional(Cash::first())->balance > 0),
             ])
 
             ->actions([
                 ActionGroup::make([
-                    Action::make('view_details')
-                        ->label('بینینی وردەکاری')
+                    Action::make('view')
+                        ->label('👁️ بینین')
                         ->icon('heroicon-o-eye')
                         ->url(fn (Cash $record): string => static::getUrl('view', ['record' => $record])),
 
-                    Action::make('quick_add')
-                        ->label('زیادکردنی پارە')
+                    Action::make('quick_add_small')
+                        ->label('➕ زیادکردن')
                         ->icon('heroicon-m-plus')
                         ->color(Color::Orange)
                         ->form([
@@ -770,20 +814,16 @@ class CashResource extends Resource
 
                             Forms\Components\Textarea::make('description')
                                 ->label('تێبینی')
+                                ->required()
                                 ->maxLength(255),
                         ])
-                        ->action(function (array $data, Cash $record): void {
-                            $record->addMoney($data['amount'], $data['description'] ?? null, now());
-                            $record->calculateProfit();
-
-                            Notification::make()
-                                ->title('زیاد کرا')
-                                ->success()
-                                ->send();
+                        ->action(function (array $data, Cash $record) {
+                            $record->addMoney($data['amount'], $data['description'], now());
+                            Notification::make()->title('زیاد کرا')->success()->send();
                         }),
 
-                    Action::make('quick_withdraw')
-                        ->label('کەمکردنەوەی پارە')
+                    Action::make('quick_withdraw_small')
+                        ->label('➖ کەمکردنەوە')
                         ->icon('heroicon-m-minus')
                         ->color(Color::Red)
                         ->form([
@@ -799,21 +839,12 @@ class CashResource extends Resource
                                 ->required()
                                 ->maxLength(255),
                         ])
-                        ->action(function (array $data, Cash $record): void {
+                        ->action(function (array $data, Cash $record) {
                             try {
                                 $record->withdrawMoney($data['amount'], $data['reason'], now());
-                                $record->calculateProfit();
-
-                                Notification::make()
-                                    ->title('کەم کرایەوە')
-                                    ->success()
-                                    ->send();
+                                Notification::make()->title('کەم کرایەوە')->success()->send();
                             } catch (\Exception $e) {
-                                Notification::make()
-                                    ->title('هەڵە!')
-                                    ->body($e->getMessage())
-                                    ->danger()
-                                    ->send();
+                                Notification::make()->title('هەڵە')->body($e->getMessage())->danger()->send();
                             }
                         })
                         ->visible(fn (Cash $record): bool => $record->balance > 0),
@@ -829,104 +860,174 @@ class CashResource extends Resource
             ->emptyStateDescription('یەکەم قیاسەی دارایی دروست بکە بۆ دەستپێکردنی تۆمارکردن')
             ->emptyStateActions([
                 Action::make('create')
-                    ->label('دروستکردنی قیاسەی دارایی')
+                    ->label('دروستکردن')
                     ->icon('heroicon-m-plus')
                     ->url(fn (): string => static::getUrl('create')),
             ])
 
-            ->poll('10s')
+            ->poll('30s')
             ->paginated(false);
     }
 
     /**
-     * فۆرمەتی پارە بە شێوازی ورد
+     * فۆرمەتی کارتی دارایی
      */
-    private static function formatMoneyDetailed($amount): string
+    private static function formatCardBalance($amount): HtmlString
+    {
+        $balance = number_format($amount);
+        $words = self::convertToWords($amount);
+
+        return new HtmlString("
+            <div class='space-y-2'>
+                <div class='text-sm opacity-80'>ڕەوشتی قاسە</div>
+                <div class='text-4xl font-bold tracking-tight'>{$balance} <span class='text-lg'>دینار</span></div>
+                <div class='text-sm opacity-75 border-t border-white/20 pt-2 mt-2'>{$words}</div>
+            </div>
+        ");
+    }
+
+    /**
+     * فۆرمەتی پێشبینینی کارتی دارایی
+     */
+    private static function formatCardPreview($record): HtmlString
+    {
+        $color = $record->profit >= 0 ? 'from-green-500 to-green-700' : 'from-red-500 to-red-700';
+        $icon = $record->profit >= 0 ? '📈' : '📉';
+
+        return new HtmlString("
+            <div class='bg-gradient-to-r {$color} text-white p-4 rounded-lg shadow-lg w-full'>
+                <div class='flex justify-between items-center'>
+                    <div class='text-sm opacity-90'>قیاسەی دارایی</div>
+                    <div class='text-2xl'>{$icon}</div>
+                </div>
+                <div class='text-2xl font-bold mt-2'>" . number_format($record->balance) . " د.ع</div>
+                <div class='flex justify-between text-xs opacity-80 mt-2'>
+                    <span>🏦 " . number_format($record->capital) . "</span>
+                    <span>📊 " . number_format($record->profit) . "</span>
+                </div>
+            </div>
+        ");
+    }
+
+    /**
+     * فۆرمەتی پارە بە توولتیپ
+     */
+    private static function formatMoneyWithTooltip($amount, $tooltip): HtmlString
+    {
+        return new HtmlString("
+            <span title='{$tooltip}' class='cursor-help border-b border-dotted'>
+                " . number_format($amount) . " د.ع
+            </span>
+        ");
+    }
+
+    /**
+     * فۆرمەتی ڕێژە
+     */
+    private static function formatPercentage($value): HtmlString
+    {
+        $color = $value >= 20 ? 'text-green-600' : ($value >= 10 ? 'text-yellow-600' : 'text-red-600');
+        $icon = $value >= 20 ? '🟢' : ($value >= 10 ? '🟡' : '🔴');
+
+        return new HtmlString("
+            <span class='{$color} font-bold'>
+                {$icon} " . number_format($value, 2) . "%
+            </span>
+        ");
+    }
+
+    /**
+     * وەسفی ڕێژەی قازانج
+     */
+    private static function getProfitDescription($margin): string
+    {
+        if ($margin >= 30) return 'ممتاز - قازانجی زۆر باش';
+        if ($margin >= 20) return 'باش - قازانجی پەسەندکراو';
+        if ($margin >= 10) return 'مامناوەند - پێویستی بە باشترکردنە';
+        if ($margin > 0) return 'کەم - پێویستە ڕێژە زیاد بکەیت';
+        return 'زیان - پێویستە خەرجی کەم بکەیتەوە';
+    }
+
+    /**
+     * دروستکردنی ڕێنمایی
+     */
+    private static function generateAdvice($record): string
+    {
+        $advice = [];
+
+        // پشکنینی قازانج
+        if ($record->profit < 0) {
+            $advice[] = "🔴 **زیان**: کۆمپانیا لە زیاندا کاردەکات. پێویستە:";
+            $advice[] = "- خەرجییەکان کەم بکەیتەوە";
+            $advice[] = "- فرۆشتن زیاد بکەیت";
+            $advice[] = "- نرخی فرۆشتن پێداچوونەوەی بکەیت";
+        } elseif ($record->profit < $record->total_income * 0.1) {
+            $advice[] = "🟡 **ڕێژەی قازانج کەمە**:";
+            $advice[] = "- هەوڵبدە نرخی فرۆشتن زیاد بکەیت";
+            $advice[] = "- خەرجییە ناپێویستەکان کەم بکەیتەوە";
+            $advice[] = "- کڕینی بەنزین بە نرخی کەمتر";
+        } else {
+            $advice[] = "🟢 **دۆخی دارایی باشە**:";
+            $advice[] = "- دەتوانیت سەرمایە زیاد بکەیت بۆ فراوانکردن";
+            $advice[] = "- بەردەوام بە لەم ڕێگایە";
+        }
+
+        // پشکنینی خەرجی
+        if ($record->total_expense > $record->total_income * 0.7) {
+            $advice[] = "📊 **خەرجی زۆرە**: " . number_format(($record->total_expense / $record->total_income) * 100, 2) . "% ی داهات دەچێتە خەرجی";
+        }
+
+        // پشکنینی سەرمایە
+        if ($record->capital == 0) {
+            $advice[] = "💰 **سەرمایە دیاری نەکراوە**: باشترە سەرمایەی سەرەتایی دیاری بکەیت";
+        } elseif ($record->balance < $record->capital) {
+            $advice[] = "⚠️ **ئاگادار**: ڕەوشتی قاسە لە سەرمایە کەمترە";
+        }
+
+        return implode("\n", $advice);
+    }
+
+    /**
+     * فۆرمەتی پەیامی سەرکەوتن
+     */
+    private static function formatSuccessMessage($type, $amount): string
+    {
+        return match($type) {
+            'capital_added' => "💰 " . number_format($amount) . " دینار وەک سەرمایەی زیادە زیاد کرا",
+            'capital_withdrawn' => "💸 " . number_format($amount) . " دینار لە سەرمایە کەم کرایەوە",
+            'money_added' => "💵 " . number_format($amount) . " دینار زیاد کرا بۆ قاسە",
+            'money_withdrawn' => "💸 " . number_format($amount) . " دینار لە قاسە کەم کرایەوە",
+            default => "کردارەکە سەرکەوتوو بوو"
+        };
+    }
+
+    /**
+     * گۆڕینی ژمارە بە وشە
+     */
+    private static function convertToWords($amount): string
     {
         if ($amount >= 1000000) {
             $millions = floor($amount / 1000000);
-            $thousands = floor(($amount % 1000000) / 1000);
-            $remainder = $amount % 1000;
-
-            $parts = [];
-            if ($millions > 0) {
-                $parts[] = number_format($millions) . ' ملیۆن';
+            $remainder = $amount % 1000000;
+            if ($remainder >= 1000) {
+                $thousands = floor($remainder / 1000);
+                return "{$millions} ملیۆن و {$thousands} هەزار دینار";
             }
-            if ($thousands > 0) {
-                $parts[] = number_format($thousands) . ' هەزار';
-            }
-            if ($remainder > 0 && $millions == 0) {
-                $parts[] = number_format($remainder);
-            }
-
-            return implode(' و ', $parts) . ' دینار';
+            return "{$millions} ملیۆن دینار";
         } elseif ($amount >= 1000) {
             $thousands = floor($amount / 1000);
             $remainder = $amount % 1000;
-
             if ($remainder > 0) {
-                return number_format($thousands) . ' هەزار و ' . number_format($remainder) . ' دینار';
+                return "{$thousands} هەزار و {$remainder} دینار";
             }
-            return number_format($thousands) . ' هەزار دینار';
+            return "{$thousands} هەزار دینار";
         }
-
-        return number_format($amount) . ' دینار';
-    }
-
-    /**
-     * فۆرمەتی پارە بە ئایکۆن
-     */
-    private static function formatMoneyWithIcon($amount, $type): string
-    {
-        $icon = match($type) {
-            'cash' => '💰',
-            'capital' => '🏦',
-            'profit' => '📈',
-            'income' => '💵',
-            'expense' => '💸',
-            default => ''
-        };
-
-        $formatted = self::formatMoneyDetailed($amount);
-        return $icon . ' ' . $formatted;
-    }
-
-    /**
-     * فۆرمەتی دوایین نوێکردنەوە
-     */
-    private static function formatLastUpdate($state): string
-    {
-        if (!$state) {
-            return '⏳ هەرگیز نوێ نەکراوەتەوە';
-        }
-
-        $now = now();
-        $diffInDays = $now->diffInDays($state);
-        $diffInHours = $now->diffInHours($state);
-
-        if ($diffInDays > 365) {
-            $years = floor($diffInDays / 365);
-            return "⏱️ {$years} ساڵ پێش ئێستا";
-        } elseif ($diffInDays > 30) {
-            $months = floor($diffInDays / 30);
-            return "⏱️ {$months} مانگ پێش ئێستا";
-        } elseif ($diffInDays > 7) {
-            $weeks = floor($diffInDays / 7);
-            return "⏱️ {$weeks} هەفتە پێش ئێستا";
-        } elseif ($diffInDays >= 1) {
-            return "⏱️ {$diffInDays} ڕۆژ پێش ئێستا";
-        } elseif ($diffInHours >= 1) {
-            return "⏱️ {$diffInHours} کاتژمێر پێش ئێستا";
-        } else {
-            return "🟢 ئێستا";
-        }
+        return $amount . " دینار";
     }
 
     public static function getRelations(): array
     {
-        return [
-            //
-        ];
+        return [];
     }
 
     public static function getPages(): array
@@ -940,12 +1041,12 @@ class CashResource extends Resource
     }
 
     /**
-     * نیشاندانی بەج لە ناڤیگەیشن
+     * بەج لە ناڤیگەیشن
      */
     public static function getNavigationBadge(): ?string
     {
         $cash = Cash::first();
-        return $cash ? self::formatMoneySimple($cash->balance) : '0 دینار';
+        return $cash ? self::formatShortNumber($cash->balance) : '0';
     }
 
     public static function getNavigationBadgeColor(): ?string
@@ -953,20 +1054,22 @@ class CashResource extends Resource
         $cash = Cash::first();
         if (!$cash) return 'gray';
 
-        if ($cash->profit > 1000000) return 'success';
-        if ($cash->profit > 0) return 'warning';
+        if ($cash->profit > 0) return 'success';
         if ($cash->profit < 0) return 'danger';
-
-        return 'gray';
+        return 'warning';
     }
 
-    private static function formatMoneySimple($amount): string
+    /**
+     * فۆرمەتی کورتی ژمارە
+     */
+    private static function formatShortNumber($number): string
     {
-        if ($amount >= 1000000) {
-            return number_format($amount / 1000000, 1) . 'M';
-        } elseif ($amount >= 1000) {
-            return number_format($amount / 1000, 1) . 'K';
+        if ($number >= 1000000) {
+            return round($number / 1000000, 1) . 'M';
         }
-        return number_format($amount);
+        if ($number >= 1000) {
+            return round($number / 1000, 1) . 'K';
+        }
+        return (string) $number;
     }
 }
