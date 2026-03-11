@@ -586,80 +586,108 @@ class SaleResource extends Resource
                         ->visible(fn ($record): bool => $record && ($record->payment_type === 'cash' || $record->status === 'pending')),
 
                     Action::make('receive_payment')
-                        ->label('وەرگرتنی پارە')
-                        ->icon('heroicon-m-currency-dollar')
-                        ->color(Color::Green)
-                        ->form([
-                            Forms\Components\TextInput::make('amount')
-                                ->label('بڕی پارە')
-                                ->numeric()
-                                ->required()
-                                ->prefix('دینار')
-                                ->minValue(1000)
-                                ->maxValue(fn ($record) => $record?->remaining_amount ?? 0)
-                                ->mask(RawJs::make('$money($input)')),
-                            Forms\Components\Select::make('payment_method')
-                                ->label('شێوازی پارەدان')
-                                ->options([
-                                    'cash' => '💰 پارەی ڕاستەوخۆ',
-                                    'bank' => '🏦 بانک',
-                                    'cheque' => '📝 چێک',
-                                ])
-                                ->required(),
-                            Forms\Components\DatePicker::make('payment_date')
-                                ->label('ڕێکەوتی پارەدان')
-                                ->default(now())
-                                ->required(),
-                            Forms\Components\Textarea::make('notes')
-                                ->label('تێبینی')
-                                ->maxLength(255),
-                        ])
-                        ->action(function (array $data, $record): void {
-                            try {
-                                // دروستکردنی CreditPayment
-                                $payment = $record->creditPayments()->create([
-                                    'customer_id' => $record->customer_id,
-                                    'amount' => $data['amount'],
-                                    'payment_date' => $data['payment_date'],
-                                    'payment_method' => $data['payment_method'],
-                                    'notes' => $data['notes'] ?? null,
-                                ]);
+    ->label('وەرگرتنی پارە')
+    ->icon('heroicon-m-currency-dollar')
+    ->color(Color::Green)
+    ->form([
+        Forms\Components\TextInput::make('amount')
+            ->label('بڕی پارە')
+            ->numeric()
+            ->required()
+            ->prefix('دینار')
+            ->minValue(1000)
+            ->maxValue(fn ($record) => $record?->remaining_amount ?? 0)
+            ->mask(RawJs::make('$money($input)')),
+        Forms\Components\Select::make('payment_method')
+            ->label('شێوازی پارەدان')
+            ->options([
+                'cash' => '💰 پارەی ڕاستەوخۆ',
+                'bank' => '🏦 بانک',
+                'cheque' => '📝 چێک',
+            ])
+            ->required(),
+        Forms\Components\DatePicker::make('payment_date')
+            ->label('ڕێکەوتی پارەدان')
+            ->default(now())
+            ->required(),
+        Forms\Components\Textarea::make('notes')
+            ->label('تێبینی')
+            ->maxLength(255),
+    ])
+    ->action(function (array $data, $record): void {
+        try {
+            // دروستکردنی CreditPayment
+            $payment = $record->creditPayments()->create([
+                'customer_id' => $record->customer_id,
+                'amount' => $data['amount'],
+                'payment_date' => $data['payment_date'],
+                'payment_method' => $data['payment_method'],
+                'notes' => $data['notes'] ?? null,
+            ]);
 
-                                // نوێکردنەوەی ڕەوشتی فرۆشتن
-                                $record->paid_amount += $data['amount'];
-                                $record->remaining_amount -= $data['amount'];
+            // نوێکردنەوەی ڕەوشتی فرۆشتن
+            $record->paid_amount += $data['amount'];
+            $record->remaining_amount -= $data['amount'];
 
-                                if ($record->remaining_amount <= 0) {
-                                    $record->status = 'paid';
-                                    $record->paid_date = $data['payment_date'];
-                                } else {
-                                    $record->status = 'partial';
-                                }
-                                $record->save();
+            if ($record->remaining_amount <= 0) {
+                $record->status = 'paid';
+                $record->paid_date = $data['payment_date'];
+            } else {
+                $record->status = 'partial';
+            }
+            $record->save();
 
-                                // نوێکردنەوەی قەرزی کڕیار
-                                $record->customer->updateDebt();
+            // نوێکردنەوەی قەرزی کڕیار
+            $record->customer->updateDebt();
 
-                                Notification::make()
-                                    ->title('پارە بە سەرکەوتوویی وەرگیرا')
-                                    ->success()
-                                    ->send();
+            // تۆمارکردنی مامەڵە لە Transaction بەبێ کاریگەری لەسەر قاسە
+            $balanceBefore = 0;
+            $balanceAfter = 0;
 
-                            } catch (\Exception $e) {
-                                Notification::make()
-                                    ->title('هەڵە!')
-                                    ->body($e->getMessage())
-                                    ->danger()
-                                    ->send();
-                            }
-                        })
-                        ->visible(fn ($record): bool =>
-                            $record &&
-                            $record->payment_type === 'credit' &&
-                            $record->remaining_amount > 0
-                        )
-                        ->modalHeading('وەرگرتنی پارەی قەرز')
-                        ->modalIcon('heroicon-o-currency-dollar'),
+            $cash = \App\Models\Cash::first();
+            if ($cash) {
+                $balanceBefore = $cash->balance;
+                $balanceAfter = $cash->balance; // هیچ گۆڕانکارییەک نییە
+            }
+
+            \App\Models\Transaction::create([
+                'transaction_number' => \App\Models\Transaction::generateTransactionNumber(),
+                'type' => 'credit_payment',
+                'amount' => $data['amount'],
+                'balance_before' => $balanceBefore,
+                'balance_after' => $balanceAfter,
+                'transactionable_type' => 'App\\Models\\CreditPayment',
+                'transactionable_id' => $payment->id,
+                'reference_number' => $record->id,
+                'description' => 'وەرگرتنی پارەی قەرز - ' . number_format($data['amount']) . ' د.ع ' .
+                                 '(' . ($record->customer->name ?? 'نادیار') . ')',
+                'transaction_date' => $data['payment_date'],
+                'created_by' => auth()->user()?->name ?? 'سیستەم',
+            ]);
+
+            Notification::make()
+                ->title('پارە بە سەرکەوتوویی وەرگیرا')
+                ->success()
+                ->body('بڕی ' . number_format($data['amount']) . ' دینار وەرگیرا')
+                ->send();
+
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('هەڵە!')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    })
+    ->visible(fn ($record): bool =>
+        $record &&
+        $record->payment_type === 'credit' &&
+        $record->remaining_amount > 0
+    )
+    ->modalHeading('وەرگرتنی پارەی قەرز')
+    ->modalIcon('heroicon-o-currency-dollar')
+    ->modalSubmitActionLabel('وەرگرتنی پارە')
+    ->modalCancelActionLabel('پاشەکشە'),
 
                     Action::make('view_payments')
                         ->label('مێژووی پارەدان')

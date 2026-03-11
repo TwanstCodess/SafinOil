@@ -6,7 +6,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Models\Category;
-use App\Models\Cash;
 use App\Models\Transaction;
 use App\Models\Customer;
 use Illuminate\Support\Facades\Log;
@@ -84,46 +83,42 @@ class Sale extends Model
                     $sale->category->updateStock($sale->liters, 'subtract');
                 }
 
-                // ٢. زیادکردنی پارە بۆ قاسە (ئەگەر قەرز نییە)
+                // ٢. نوێکردنەوەی قەرزی کڕیار (ئەگەر قەرزە)
+                if ($sale->payment_type === 'credit' && $sale->customer) {
+                    $sale->customer->updateDebt();
+                }
+
+                // ٣. تۆمارکردنی مامەڵە **بەبێ کاریگەری لەسەر قاسە**
+                // بەکارهێنانی balance_before و balance_afterی وەک ٠ یان وەک خۆی
+                $balanceBefore = 0; // چونکە کاریگەری لەسەر قاسە نییە
+                $balanceAfter = 0;  // چونکە کاریگەری لەسەر قاسە نییە
+
+                // بەدەستهێنانی قاسە ئەگەر هەبێت بۆ تۆمارکردنی balance
                 $cash = Cash::first();
-                if (!$cash) {
-                    $cash = Cash::create([
-                        'balance' => 0,
-                        'total_income' => 0,
-                        'total_expense' => 0,
-                        'capital' => 0,
-                        'profit' => 0,
-                        'last_update' => now(),
-                    ]);
+                if ($cash) {
+                    $balanceBefore = $cash->balance;
+                    $balanceAfter = $cash->balance; // هیچ گۆڕانکارییەک نییە
                 }
 
-                $balanceBefore = $cash->balance;
+                // دیاریکردنی جۆری مامەڵە
+                $transactionType = $sale->payment_type === 'cash' ? 'sale' : 'credit_sale';
 
-                // ئەگەر فرۆشتن بە پارەی ڕاستەوخۆ بوو
+                // دروستکردنی وەسف بۆ مامەڵە
+                $description = 'فرۆشتنی ' . number_format($sale->liters) . ' لیتر ' . ($sale->category->name ?? 'بەنزین');
+
                 if ($sale->payment_type === 'cash') {
-                    $cash->balance += $sale->total_price;
-                    $cash->total_income += $sale->total_price;
-                    $description = 'فرۆشتنی ' . number_format($sale->liters) . ' لیتر ' . ($sale->category->name ?? 'بەنزین') . ' - پارەی ڕاستەوخۆ';
-                }
-                // ئەگەر فرۆشتن بە قەرز بوو
-                else {
-                    // نوێکردنەوەی قەرزی کڕیار
-                    if ($sale->customer) {
-                        $sale->customer->updateDebt();
-                    }
-                    $description = 'فرۆشتنی قەرز - ' . number_format($sale->liters) . ' لیتر ' . ($sale->category->name ?? 'بەنزین') . ' - قەرزدار: ' . ($sale->customer->name ?? 'نادیار');
+                    $description .= ' - پارەی ڕاستەوخۆ';
+                } else {
+                    $description .= ' - قەرز بۆ ' . ($sale->customer->name ?? 'کڕیارێک');
                 }
 
-                $cash->last_update = now();
-                $cash->save();
-
-                // ٣. تۆمارکردنی مامەڵە
+                // تۆمارکردنی مامەڵە **بەبێ زیادکردنی پارە بۆ قاسە**
                 Transaction::create([
                     'transaction_number' => Transaction::generateTransactionNumber(),
-                    'type' => $sale->payment_type === 'cash' ? 'sale' : 'credit_sale',
+                    'type' => $transactionType,
                     'amount' => $sale->total_price,
                     'balance_before' => $balanceBefore,
-                    'balance_after' => $cash->balance,
+                    'balance_after' => $balanceAfter, // وەک خۆی، زیاد ناکات
                     'transactionable_type' => self::class,
                     'transactionable_id' => $sale->id,
                     'reference_number' => $sale->id,
