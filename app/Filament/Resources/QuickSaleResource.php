@@ -33,7 +33,6 @@ class QuickSaleResource extends Resource
     protected static ?string $pluralModelLabel = 'فرۆشی خێرا';
     protected static ?string $recordTitleAttribute = 'sale_date';
 
-    // دیاریکردنی ناوچەی کاتی (Time Zone)
     protected static function getTodayDate(): string
     {
         return Carbon::now()->format('Y-m-d');
@@ -101,7 +100,7 @@ class QuickSaleResource extends Resource
                                 Forms\Components\Select::make('status')
                                     ->label('ڕەوشت')
                                     ->options([
-                                        'open' => 'کراوە',
+                                        'open'   => 'کراوە',
                                         'closed' => 'داخراو',
                                     ])
                                     ->default('open')
@@ -188,19 +187,16 @@ class QuickSaleResource extends Resource
         foreach ($allCategories as $catId => $category) {
             $typeKey = $category['type_key'];
             if (!isset($grouped[$typeKey])) {
-                $grouped[$typeKey] = [
-                    'name' => $category['type'],
-                    'items' => []
-                ];
+                $grouped[$typeKey] = ['name' => $category['type'], 'items' => []];
             }
             $grouped[$typeKey]['items'][$catId] = $category;
         }
 
         foreach ($grouped as $typeKey => $group) {
             $color = match($typeKey) {
-                'fuel' => 'warning',
-                'oil' => 'success',
-                'gas' => 'info',
+                'fuel'  => 'warning',
+                'oil'   => 'success',
+                'gas'   => 'info',
                 default => 'gray',
             };
 
@@ -247,19 +243,16 @@ class QuickSaleResource extends Resource
         foreach ($allCategories as $catId => $category) {
             $typeKey = $category['type_key'];
             if (!isset($grouped[$typeKey])) {
-                $grouped[$typeKey] = [
-                    'name' => $category['type'],
-                    'items' => []
-                ];
+                $grouped[$typeKey] = ['name' => $category['type'], 'items' => []];
             }
             $grouped[$typeKey]['items'][$catId] = $category;
         }
 
         foreach ($grouped as $typeKey => $group) {
             $color = match($typeKey) {
-                'fuel' => 'warning',
-                'oil' => 'success',
-                'gas' => 'info',
+                'fuel'  => 'warning',
+                'oil'   => 'success',
+                'gas'   => 'info',
                 default => 'gray',
             };
 
@@ -306,19 +299,16 @@ class QuickSaleResource extends Resource
         foreach ($allCategories as $catId => $category) {
             $typeKey = $category['type_key'];
             if (!isset($grouped[$typeKey])) {
-                $grouped[$typeKey] = [
-                    'name' => $category['type'],
-                    'items' => []
-                ];
+                $grouped[$typeKey] = ['name' => $category['type'], 'items' => []];
             }
             $grouped[$typeKey]['items'][$catId] = $category;
         }
 
         foreach ($grouped as $typeKey => $group) {
             $color = match($typeKey) {
-                'fuel' => 'warning',
-                'oil' => 'success',
-                'gas' => 'info',
+                'fuel'  => 'warning',
+                'oil'   => 'success',
+                'gas'   => 'info',
                 default => 'gray',
             };
 
@@ -339,8 +329,9 @@ class QuickSaleResource extends Resource
                             ->numeric()
                             ->default(function (callable $get) use ($catId) {
                                 $initial = floatval($get("initial_readings.{$catId}") ?? 0);
-                                $final = floatval($get("final_readings.{$catId}") ?? 0);
-                                return $initial - $final;
+                                $final   = floatval($get("final_readings.{$catId}")   ?? 0);
+                                // ✅ وەک خۆی بەبێ ÷2
+                                return ($initial - $final);
                             })
                             ->suffix('لیتر')
                             ->mask(RawJs::make('$money($input)'))
@@ -365,7 +356,6 @@ class QuickSaleResource extends Resource
         $fields = [];
         $allCategories = QuickSale::getAllCategoriesList();
 
-        // دوگمەی کۆپی کردن
         $fields[] = Forms\Components\Actions::make([
             Forms\Components\Actions\Action::make('copyToReported')
                 ->label('کۆپی کردنی فرۆشراوەکان بۆ فرۆشراوی تۆ')
@@ -374,11 +364,10 @@ class QuickSaleResource extends Resource
                 ->action(function (callable $set, callable $get) use ($allCategories) {
                     foreach ($allCategories as $catId => $category) {
                         $initial = floatval($get("initial_readings.{$catId}") ?? 0);
-                        $final = floatval($get("final_readings.{$catId}") ?? 0);
-                        $sold = $initial - $final;
-                        $set("reported_sold.{$catId}", $sold);
+                        $final   = floatval($get("final_readings.{$catId}")   ?? 0);
+                        // ✅ وەک خۆی بەبێ ÷2
+                        $set("reported_sold.{$catId}", $initial - $final);
                     }
-
                     self::updateCalculations($set, $get);
 
                     Notification::make()
@@ -390,47 +379,33 @@ class QuickSaleResource extends Resource
         ])
         ->columnSpanFull();
 
-        // سەرەتا ناونیشانی ستوونەکان
+        // ناونیشانی ستوونەکان
         $fields[] = Forms\Components\Grid::make(7)
             ->schema([
                 Forms\Components\Placeholder::make('header_category')
-                    ->label('')
-                    ->content(new HtmlString('<span class="font-bold text-gray-700">کاتیگۆری</span>')),
-
+                    ->label('')->content(new HtmlString('<span class="font-bold text-gray-700">کاتیگۆری</span>')),
                 Forms\Components\Placeholder::make('header_initial')
-                    ->label('')
-                    ->content(new HtmlString('<span class="font-bold text-gray-700">سەرەتایی</span>')),
-
+                    ->label('')->content(new HtmlString('<span class="font-bold text-gray-700">سەرەتایی</span>')),
                 Forms\Components\Placeholder::make('header_final')
-                    ->label('')
-                    ->content(new HtmlString('<span class="font-bold text-gray-700">کۆتایی</span>')),
-
+                    ->label('')->content(new HtmlString('<span class="font-bold text-gray-700">کۆتایی</span>')),
                 Forms\Components\Placeholder::make('header_sold')
-                    ->label('')
-                    ->content(new HtmlString('<span class="font-bold text-gray-700">فرۆشراو</span>')),
-
+                    ->label('')->content(new HtmlString('<span class="font-bold text-gray-700">فرۆشراو</span>')),
                 Forms\Components\Placeholder::make('header_reported')
-                    ->label('')
-                    ->content(new HtmlString('<span class="font-bold text-gray-700">فرۆشراوی تۆ</span>')),
-
+                    ->label('')->content(new HtmlString('<span class="font-bold text-gray-700">فرۆشراوی تۆ</span>')),
                 Forms\Components\Placeholder::make('header_diff_liter')
-                    ->label('')
-                    ->content(new HtmlString('<span class="font-bold text-gray-700">جیاوازی (لیتر)</span>')),
-
+                    ->label('')->content(new HtmlString('<span class="font-bold text-gray-700">جیاوازی (لیتر)</span>')),
                 Forms\Components\Placeholder::make('header_diff_price')
-                    ->label('')
-                    ->content(new HtmlString('<span class="font-bold text-gray-700">جیاوازی (دینار)</span>')),
+                    ->label('')->content(new HtmlString('<span class="font-bold text-gray-700">جیاوازی (دینار)</span>')),
             ])
             ->columns(7)
             ->extraAttributes(['class' => 'bg-gray-100 p-2 rounded-t-lg mb-2']);
 
-        // بۆ هەر کاتیگۆرییەک
         foreach ($allCategories as $catId => $category) {
             $typeKey = $category['type_key'];
             $bgColor = match($typeKey) {
-                'fuel' => 'bg-warning-50',
-                'oil' => 'bg-success-50',
-                'gas' => 'bg-info-50',
+                'fuel'  => 'bg-warning-50',
+                'oil'   => 'bg-success-50',
+                'gas'   => 'bg-info-50',
                 default => 'bg-gray-50',
             };
 
@@ -466,12 +441,12 @@ class QuickSaleResource extends Resource
                     Forms\Components\Placeholder::make("sold_display.{$catId}")
                         ->label('')
                         ->content(function (callable $get) use ($catId, $category) {
-                            $initial = floatval($get("initial_readings.{$catId}") ?? 0);
-                            $final = floatval($get("final_readings.{$catId}") ?? 0);
-                            $sold = $initial - $final;
+                            $initial    = floatval($get("initial_readings.{$catId}") ?? 0);
+                            $final      = floatval($get("final_readings.{$catId}")   ?? 0);
+                            // ✅ لیتر × 2
+                            $sold       = ($initial - $final) * 2;
                             $totalPrice = $sold * $category['price'];
-
-                            $color = $sold > 0 ? 'text-success-600' : 'text-gray-400';
+                            $color      = $sold > 0 ? 'text-success-600' : 'text-gray-400';
 
                             return new HtmlString(
                                 "<div class='flex flex-col'>
@@ -484,10 +459,10 @@ class QuickSaleResource extends Resource
                     Forms\Components\Placeholder::make("reported_display.{$catId}")
                         ->label('')
                         ->content(function (callable $get) use ($catId, $category) {
-                            $initial = floatval($get("initial_readings.{$catId}") ?? 0);
-                            $final = floatval($get("final_readings.{$catId}") ?? 0);
-                            $sold = $initial - $final;
-                            $reported = floatval($get("reported_sold.{$catId}") ?? $sold);
+                            $initial    = floatval($get("initial_readings.{$catId}") ?? 0);
+                            $final      = floatval($get("final_readings.{$catId}")   ?? 0);
+                            // ✅ لیتر × 2
+                            $reported   = floatval($get("reported_sold.{$catId}") ?? ($initial - $final)) * 2;
                             $totalPrice = $reported * $category['price'];
 
                             return new HtmlString(
@@ -501,19 +476,20 @@ class QuickSaleResource extends Resource
                     Forms\Components\Placeholder::make("diff_liter.{$catId}")
                         ->label('')
                         ->content(function (callable $get) use ($catId) {
-                            $initial = floatval($get("initial_readings.{$catId}") ?? 0);
-                            $final = floatval($get("final_readings.{$catId}") ?? 0);
-                            $reported = floatval($get("reported_sold.{$catId}") ?? 0);
+                            $initial    = floatval($get("initial_readings.{$catId}") ?? 0);
+                            $final      = floatval($get("final_readings.{$catId}")   ?? 0);
+                            $reported   = floatval($get("reported_sold.{$catId}")    ?? 0);
                             $calculated = $initial - $final;
                             $difference = $reported - $calculated;
 
                             $diffColor = $difference == 0 ? 'gray' : ($difference > 0 ? 'success' : 'danger');
-                            $icon = $difference == 0 ? '✓' : ($difference > 0 ? '↑' : '↓');
+                            $icon      = $difference == 0 ? '✓' : ($difference > 0 ? '↑' : '↓');
 
                             return new HtmlString(
                                 "<div class='flex items-center gap-1'>
                                     <span class='text-{$diffColor}-600 font-bold'>{$icon}</span>
                                     <span class='text-{$diffColor}-600 font-bold'>"
+                                    // ✅ هێمای ناقسی نییە — abs() بەکاردێت
                                     . number_format(abs($difference)) . " لیتر</span>
                                 </div>"
                             );
@@ -522,16 +498,17 @@ class QuickSaleResource extends Resource
                     Forms\Components\Placeholder::make("diff_price.{$catId}")
                         ->label('')
                         ->content(function (callable $get) use ($catId, $category) {
-                            $initial = floatval($get("initial_readings.{$catId}") ?? 0);
-                            $final = floatval($get("final_readings.{$catId}") ?? 0);
-                            $reported = floatval($get("reported_sold.{$catId}") ?? 0);
+                            $initial    = floatval($get("initial_readings.{$catId}") ?? 0);
+                            $final      = floatval($get("final_readings.{$catId}")   ?? 0);
+                            $reported   = floatval($get("reported_sold.{$catId}")    ?? 0);
                             $calculated = $initial - $final;
                             $difference = $reported - $calculated;
-                            $priceDiff = $difference * $category['price'];
+                            $priceDiff  = $difference * $category['price'];
 
                             $diffColor = $priceDiff == 0 ? 'gray' : ($priceDiff > 0 ? 'success' : 'danger');
 
                             return new HtmlString(
+                                // ✅ هێمای ناقسی نییە — abs() بەکاردێت
                                 "<span class='text-{$diffColor}-600 font-bold'>"
                                 . number_format(abs($priceDiff)) . " د.ع</span>"
                             );
@@ -550,13 +527,11 @@ class QuickSaleResource extends Resource
                         Forms\Components\Placeholder::make('total_initial')
                             ->label('کۆی سەرەتایی')
                             ->content(function (callable $get) {
-                                $total = 0;
+                                $total      = 0;
                                 $categories = Category::all();
-
                                 foreach ($categories as $category) {
                                     $total += floatval($get("initial_readings.{$category->id}") ?? 0);
                                 }
-
                                 return new HtmlString(
                                     "<span class='text-blue-600 font-bold text-xl'>" .
                                     number_format($total) . " لیتر</span>"
@@ -566,13 +541,11 @@ class QuickSaleResource extends Resource
                         Forms\Components\Placeholder::make('total_final')
                             ->label('کۆی کۆتایی')
                             ->content(function (callable $get) {
-                                $total = 0;
+                                $total      = 0;
                                 $categories = Category::all();
-
                                 foreach ($categories as $category) {
                                     $total += floatval($get("final_readings.{$category->id}") ?? 0);
                                 }
-
                                 return new HtmlString(
                                     "<span class='text-purple-600 font-bold text-xl'>" .
                                     number_format($total) . " لیتر</span>"
@@ -582,15 +555,14 @@ class QuickSaleResource extends Resource
                         Forms\Components\Placeholder::make('total_sold')
                             ->label('کۆی فرۆشراو')
                             ->content(function (callable $get) {
-                                $total = 0;
+                                $total      = 0;
                                 $categories = Category::all();
-
                                 foreach ($categories as $category) {
                                     $initial = floatval($get("initial_readings.{$category->id}") ?? 0);
-                                    $final = floatval($get("final_readings.{$category->id}") ?? 0);
-                                    $total += ($initial - $final);
+                                    $final   = floatval($get("final_readings.{$category->id}")   ?? 0);
+                                    // ✅ لیتر × 2
+                                    $total += ($initial - $final) * 2;
                                 }
-
                                 return new HtmlString(
                                     "<span class='text-success-600 font-bold text-xl'>" .
                                     number_format($total) . " لیتر</span>"
@@ -600,13 +572,12 @@ class QuickSaleResource extends Resource
                         Forms\Components\Placeholder::make('total_reported')
                             ->label('کۆی فرۆشراوی تۆ')
                             ->content(function (callable $get) {
-                                $total = 0;
+                                $total      = 0;
                                 $categories = Category::all();
-
                                 foreach ($categories as $category) {
-                                    $total += floatval($get("reported_sold.{$category->id}") ?? 0);
+                                    // ✅ لیتر × 2
+                                    $total += floatval($get("reported_sold.{$category->id}") ?? 0) * 2;
                                 }
-
                                 return new HtmlString(
                                     "<span class='text-info-600 font-bold text-xl'>" .
                                     number_format($total) . " لیتر</span>"
@@ -620,25 +591,25 @@ class QuickSaleResource extends Resource
                         Forms\Components\Placeholder::make('total_difference_liter')
                             ->label('کۆی جیاوازی (لیتر)')
                             ->content(function (callable $get) {
-                                $totalDiff = 0;
+                                $totalDiff  = 0;
                                 $categories = Category::all();
-
                                 foreach ($categories as $category) {
-                                    $catId = $category->id;
-                                    $initial = floatval($get("initial_readings.{$catId}") ?? 0);
-                                    $final = floatval($get("final_readings.{$catId}") ?? 0);
-                                    $reported = floatval($get("reported_sold.{$catId}") ?? 0);
+                                    $catId      = $category->id;
+                                    $initial    = floatval($get("initial_readings.{$catId}") ?? 0);
+                                    $final      = floatval($get("final_readings.{$catId}")   ?? 0);
+                                    $reported   = floatval($get("reported_sold.{$catId}")    ?? 0);
                                     $calculated = $initial - $final;
                                     $totalDiff += ($reported - $calculated);
                                 }
 
                                 $diffColor = $totalDiff == 0 ? 'gray' : ($totalDiff > 0 ? 'success' : 'danger');
-                                $icon = $totalDiff == 0 ? '✓' : ($totalDiff > 0 ? '↑' : '↓');
+                                $icon      = $totalDiff == 0 ? '✓' : ($totalDiff > 0 ? '↑' : '↓');
 
                                 return new HtmlString(
                                     "<div class='flex items-center gap-2'>
                                         <span class='text-{$diffColor}-600 font-bold text-2xl'>{$icon}</span>
                                         <span class='text-{$diffColor}-600 font-bold text-2xl'>"
+                                        // ✅ هێمای ناقسی نییە
                                         . number_format(abs($totalDiff)) . " لیتر</span>
                                     </div>"
                                 );
@@ -648,21 +619,21 @@ class QuickSaleResource extends Resource
                             ->label('کۆی جیاوازی (دینار)')
                             ->content(function (callable $get) {
                                 $totalDiffPrice = 0;
-                                $categories = Category::all();
-
+                                $categories     = Category::all();
                                 foreach ($categories as $category) {
-                                    $catId = $category->id;
-                                    $initial = floatval($get("initial_readings.{$catId}") ?? 0);
-                                    $final = floatval($get("final_readings.{$catId}") ?? 0);
-                                    $reported = floatval($get("reported_sold.{$catId}") ?? 0);
-                                    $calculated = $initial - $final;
-                                    $difference = $reported - $calculated;
+                                    $catId          = $category->id;
+                                    $initial        = floatval($get("initial_readings.{$catId}") ?? 0);
+                                    $final          = floatval($get("final_readings.{$catId}")   ?? 0);
+                                    $reported       = floatval($get("reported_sold.{$catId}")    ?? 0);
+                                    $calculated     = $initial - $final;
+                                    $difference     = $reported - $calculated;
                                     $totalDiffPrice += $difference * $category->current_price;
                                 }
 
                                 $diffColor = $totalDiffPrice == 0 ? 'gray' : ($totalDiffPrice > 0 ? 'success' : 'danger');
 
                                 return new HtmlString(
+                                    // ✅ هێمای ناقسی نییە
                                     "<span class='text-{$diffColor}-600 font-bold text-2xl'>"
                                     . number_format(abs($totalDiffPrice)) . " د.ع</span>"
                                 );
@@ -673,16 +644,15 @@ class QuickSaleResource extends Resource
                 Forms\Components\Placeholder::make('total_amount_display')
                     ->label('کۆی گشتی فرۆشراو (دینار)')
                     ->content(function (callable $get) {
-                        $total = 0;
+                        $total      = 0;
                         $categories = Category::all();
-
                         foreach ($categories as $category) {
                             $initial = floatval($get("initial_readings.{$category->id}") ?? 0);
-                            $final = floatval($get("final_readings.{$category->id}") ?? 0);
-                            $sold = $initial - $final;
-                            $total += $sold * $category->current_price;
+                            $final   = floatval($get("final_readings.{$category->id}")   ?? 0);
+                            // ✅ پارە = لیتر × 2 × نرخ
+                            $sold    = ($initial - $final) * 2;
+                            $total  += $sold * $category->current_price;
                         }
-
                         return new HtmlString(
                             "<span class='text-success-600 font-bold text-3xl'>" .
                             number_format($total) . " دینار</span>"
@@ -693,16 +663,14 @@ class QuickSaleResource extends Resource
                 Forms\Components\Placeholder::make('total_liters_display')
                     ->label('کۆی گشتی فرۆشراو (لیتر)')
                     ->content(function (callable $get) {
-                        $total = 0;
+                        $total      = 0;
                         $categories = Category::all();
-
                         foreach ($categories as $category) {
                             $initial = floatval($get("initial_readings.{$category->id}") ?? 0);
-                            $final = floatval($get("final_readings.{$category->id}") ?? 0);
-                            $sold = $initial - $final;
-                            $total += $sold;
+                            $final   = floatval($get("final_readings.{$category->id}")   ?? 0);
+                            // ✅ لیتر × 2
+                            $total  += ($initial - $final) * 2;
                         }
-
                         return new HtmlString(
                             "<span class='text-info-600 font-bold text-3xl'>" .
                             number_format($total) . " لیتر</span>"
@@ -720,15 +688,16 @@ class QuickSaleResource extends Resource
 
     private static function updateCalculations(callable $set, callable $get)
     {
-        $total = 0;
+        $total       = 0;
         $totalLiters = 0;
-        $categories = Category::all();
+        $categories  = Category::all();
 
         foreach ($categories as $category) {
             $initial = floatval($get("initial_readings.{$category->id}") ?? 0);
-            $final = floatval($get("final_readings.{$category->id}") ?? 0);
-            $sold = $initial - $final;
-            $total += $sold * $category->current_price;
+            $final   = floatval($get("final_readings.{$category->id}")   ?? 0);
+            // ✅ لیتر × 2، پارە = لیتر × 2 × نرخ
+            $sold         = ($initial - $final) * 2;
+            $total       += $sold * $category->current_price;
             $totalLiters += $sold;
         }
 
@@ -762,29 +731,33 @@ class QuickSaleResource extends Resource
                     ->label('ڕەوشت')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
-                        'open' => 'success',
+                        'open'   => 'success',
                         'closed' => 'gray',
                     })
                     ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'open' => 'کراوە',
+                        'open'   => 'کراوە',
                         'closed' => 'داخراو',
                     }),
 
-                Tables\Columns\TextColumn::make('total_amount')
-                    ->label('کۆی گشتی (دینار)')
-                    ->money('IQD')
-                    ->sortable()
-                    ->weight('bold')
-                    ->color('success')
-                    ->description(fn ($record): string => number_format($record->total_liters, 0) . ' لیتر', 'above'),
+Tables\Columns\TextColumn::make('total_amount')
+    ->label('کۆی گشتی (دینار)')
+    ->money('IQD')
+    ->sortable()
+    ->weight('bold')
+    ->color('success')
+    ->formatStateUsing(fn ($state): string =>
+        number_format(abs(floatval($state)), 0) . ' د.ع'
+    ),
 
-                Tables\Columns\TextColumn::make('total_liters')
-                    ->label('کۆی گشتی (لیتر)')
-                    ->sortable()
-                    ->weight('bold')
-                    ->color('info')
-                    ->formatStateUsing(fn ($state): string => number_format($state, 0) . ' لیتر')
-                    ->toggleable(),
+Tables\Columns\TextColumn::make('total_liters')
+    ->label('کۆی گشتی (لیتر)')
+    ->sortable()
+    ->weight('bold')
+    ->color('info')
+    ->formatStateUsing(fn ($state): string =>
+        number_format(abs(floatval($state)), 0)*2 . ' لیتر'
+    )
+    ->toggleable(),
 
                 Tables\Columns\TextColumn::make('creator.name')
                     ->label('تۆمارکراو لەلایەن')
@@ -798,10 +771,7 @@ class QuickSaleResource extends Resource
                     ->toggleable(),
             ])
 
-            // ========== فلتەرە پڕۆفیشناڵەکان ==========
             ->filters([
-
-                // فلتەری مەودای بەرواری فرۆشتن
                 Filter::make('sale_date')
                     ->label('مەودای بەروار')
                     ->form([
@@ -821,230 +791,120 @@ class QuickSaleResource extends Resource
                     ])
                     ->query(function (Builder $query, array $data) {
                         return $query
-                            ->when(
-                                $data['from'],
-                                fn ($q) => $q->whereDate('sale_date', '>=', $data['from'])
-                            )
-                            ->when(
-                                $data['until'],
-                                fn ($q) => $q->whereDate('sale_date', '<=', $data['until'])
-                            );
+                            ->when($data['from'],  fn ($q) => $q->whereDate('sale_date', '>=', $data['from']))
+                            ->when($data['until'], fn ($q) => $q->whereDate('sale_date', '<=', $data['until']));
                     })
                     ->indicateUsing(function (array $data) {
                         $indicators = [];
-                        if ($data['from'] ?? null) {
-                            $indicators[] = 'لە ' . \Carbon\Carbon::parse($data['from'])->format('Y/m/d');
-                        }
-                        if ($data['until'] ?? null) {
-                            $indicators[] = 'تا ' . \Carbon\Carbon::parse($data['until'])->format('Y/m/d');
-                        }
+                        if ($data['from']  ?? null) $indicators[] = 'لە ' . Carbon::parse($data['from'])->format('Y/m/d');
+                        if ($data['until'] ?? null) $indicators[] = 'تا ' . Carbon::parse($data['until'])->format('Y/m/d');
                         return $indicators ? 'بەروار: ' . implode(' - ', $indicators) : null;
                     })
-                    ->columns(2)
-                    ->columnSpan(2),
+                    ->columns(2)->columnSpan(2),
 
-                // فلتەری شەفت
                 SelectFilter::make('shift')
                     ->label('شەفت')
-                    ->options([
-                        'morning' => '🌅 شەفتی بەیانی',
-                        'evening' => '🌙 شەفتی ئێوارە',
-                    ])
-                    ->multiple()
-                    ->searchable()
-                    ->preload()
-                    ->indicator('شەفت')
-                    ->placeholder('هەموو شەفتەکان')
-                    ->columnSpan(1),
+                    ->options(['morning' => '🌅 شەفتی بەیانی', 'evening' => '🌙 شەفتی ئێوارە'])
+                    ->multiple()->searchable()->preload()
+                    ->indicator('شەفت')->placeholder('هەموو شەفتەکان')->columnSpan(1),
 
-                // فلتەری ڕەوشت
                 SelectFilter::make('status')
                     ->label('ڕەوشت')
-                    ->options([
-                        'open' => 'کراوە',
-                        'closed' => 'داخراو',
-                    ])
-                    ->multiple()
-                    ->searchable()
-                    ->preload()
-                    ->indicator('ڕەوشت')
-                    ->placeholder('هەموو ڕەوشتەکان')
-                    ->columnSpan(1),
+                    ->options(['open' => 'کراوە', 'closed' => 'داخراو'])
+                    ->multiple()->searchable()->preload()
+                    ->indicator('ڕەوشت')->placeholder('هەموو ڕەوشتەکان')->columnSpan(1),
 
-                // فلتەری کڕینی ئەمڕۆ
                 Filter::make('today')
-                    ->label('ئەمڕۆ')
-                    ->toggle()
+                    ->label('ئەمڕۆ')->toggle()
                     ->query(fn ($query) => $query->whereDate('sale_date', today()))
-                    ->indicator('ئەمڕۆ')
-                    ->columnSpan(1),
+                    ->indicator('ئەمڕۆ')->columnSpan(1),
 
-                // فلتەری کڕینی دوێنێ
                 Filter::make('yesterday')
-                    ->label('دوێنێ')
-                    ->toggle()
+                    ->label('دوێنێ')->toggle()
                     ->query(fn ($query) => $query->whereDate('sale_date', today()->subDay()))
-                    ->indicator('دوێنێ')
-                    ->columnSpan(1),
+                    ->indicator('دوێنێ')->columnSpan(1),
 
-                // فلتەری کڕینی ئەم هەفتەیە
                 Filter::make('this_week')
-                    ->label('ئەم هەفتەیە')
-                    ->toggle()
+                    ->label('ئەم هەفتەیە')->toggle()
                     ->query(fn ($query) => $query->whereBetween('sale_date', [now()->startOfWeek(), now()->endOfWeek()]))
-                    ->indicator('ئەم هەفتەیە')
-                    ->columnSpan(1),
+                    ->indicator('ئەم هەفتەیە')->columnSpan(1),
 
-                // فلتەری کڕینی ئەم مانگە
                 Filter::make('this_month')
-                    ->label('ئەم مانگە')
-                    ->toggle()
-                    ->query(fn ($query) => $query->whereMonth('sale_date', now()->month)
-                        ->whereYear('sale_date', now()->year))
-                    ->indicator('ئەم مانگە')
-                    ->columnSpan(1),
+                    ->label('ئەم مانگە')->toggle()
+                    ->query(fn ($query) => $query->whereMonth('sale_date', now()->month)->whereYear('sale_date', now()->year))
+                    ->indicator('ئەم مانگە')->columnSpan(1),
 
-                // فلتەری کڕینی ئەمساڵ
                 Filter::make('this_year')
-                    ->label('ئەمساڵ')
-                    ->toggle()
+                    ->label('ئەمساڵ')->toggle()
                     ->query(fn ($query) => $query->whereYear('sale_date', now()->year))
-                    ->indicator('ئەمساڵ')
-                    ->columnSpan(1),
+                    ->indicator('ئەمساڵ')->columnSpan(1),
 
-                // فلتەری مەودای کۆی گشتی (دینار)
                 Filter::make('total_amount_range')
                     ->label('مەودای کۆی گشتی (دینار)')
                     ->form([
-                        Forms\Components\TextInput::make('min_amount')
-                            ->label('کەمترین')
-                            ->numeric()
-                            ->prefix('د.ع')
-                            ->placeholder('١٠٠٠٠٠'),
-                        Forms\Components\TextInput::make('max_amount')
-                            ->label('زۆرترین')
-                            ->numeric()
-                            ->prefix('د.ع')
-                            ->placeholder('١٠٠٠٠٠٠'),
+                        Forms\Components\TextInput::make('min_amount')->label('کەمترین')->numeric()->prefix('د.ع')->placeholder('١٠٠٠٠٠'),
+                        Forms\Components\TextInput::make('max_amount')->label('زۆرترین')->numeric()->prefix('د.ع')->placeholder('١٠٠٠٠٠٠'),
                     ])
                     ->query(function (Builder $query, array $data) {
                         return $query
-                            ->when(
-                                $data['min_amount'],
-                                fn ($q) => $q->where('total_amount', '>=', $data['min_amount'])
-                            )
-                            ->when(
-                                $data['max_amount'],
-                                fn ($q) => $q->where('total_amount', '<=', $data['max_amount'])
-                            );
+                            ->when($data['min_amount'], fn ($q) => $q->where('total_amount', '>=', $data['min_amount']))
+                            ->when($data['max_amount'], fn ($q) => $q->where('total_amount', '<=', $data['max_amount']));
                     })
                     ->indicateUsing(function (array $data) {
                         $indicators = [];
-                        if ($data['min_amount'] ?? null) {
-                            $indicators[] = 'کەمتر نییە لە ' . number_format($data['min_amount']) . ' د.ع';
-                        }
-                        if ($data['max_amount'] ?? null) {
-                            $indicators[] = 'زیاتر نییە لە ' . number_format($data['max_amount']) . ' د.ع';
-                        }
+                        if ($data['min_amount'] ?? null) $indicators[] = 'کەمتر نییە لە ' . number_format($data['min_amount']) . ' د.ع';
+                        if ($data['max_amount'] ?? null) $indicators[] = 'زیاتر نییە لە ' . number_format($data['max_amount']) . ' د.ع';
                         return $indicators ? 'کۆی گشتی: ' . implode(' و ', $indicators) : null;
                     })
-                    ->columns(2)
-                    ->columnSpan(2),
+                    ->columns(2)->columnSpan(2),
 
-                // فلتەری مەودای کۆی لیتر
                 Filter::make('total_liters_range')
                     ->label('مەودای کۆی لیتر')
                     ->form([
-                        Forms\Components\TextInput::make('min_liters')
-                            ->label('کەمترین')
-                            ->numeric()
-                            ->suffix('لیتر')
-                            ->placeholder('١٠٠'),
-                        Forms\Components\TextInput::make('max_liters')
-                            ->label('زۆرترین')
-                            ->numeric()
-                            ->suffix('لیتر')
-                            ->placeholder('١٠٠٠'),
+                        Forms\Components\TextInput::make('min_liters')->label('کەمترین')->numeric()->suffix('لیتر')->placeholder('١٠٠'),
+                        Forms\Components\TextInput::make('max_liters')->label('زۆرترین')->numeric()->suffix('لیتر')->placeholder('١٠٠٠'),
                     ])
                     ->query(function (Builder $query, array $data) {
                         return $query
-                            ->when(
-                                $data['min_liters'],
-                                fn ($q) => $q->where('total_liters', '>=', $data['min_liters'])
-                            )
-                            ->when(
-                                $data['max_liters'],
-                                fn ($q) => $q->where('total_liters', '<=', $data['max_liters'])
-                            );
+                            ->when($data['min_liters'], fn ($q) => $q->where('total_liters', '>=', $data['min_liters']))
+                            ->when($data['max_liters'], fn ($q) => $q->where('total_liters', '<=', $data['max_liters']));
                     })
                     ->indicateUsing(function (array $data) {
                         $indicators = [];
-                        if ($data['min_liters'] ?? null) {
-                            $indicators[] = 'کەمتر نییە لە ' . number_format($data['min_liters']) . ' لیتر';
-                        }
-                        if ($data['max_liters'] ?? null) {
-                            $indicators[] = 'زیاتر نییە لە ' . number_format($data['max_liters']) . ' لیتر';
-                        }
+                        if ($data['min_liters'] ?? null) $indicators[] = 'کەمتر نییە لە ' . number_format($data['min_liters']) . ' لیتر';
+                        if ($data['max_liters'] ?? null) $indicators[] = 'زیاتر نییە لە ' . number_format($data['max_liters']) . ' لیتر';
                         return $indicators ? 'کۆی لیتر: ' . implode(' و ', $indicators) : null;
                     })
-                    ->columns(2)
-                    ->columnSpan(2),
+                    ->columns(2)->columnSpan(2),
 
-                // فلتەری تۆمارکراو لەلایەن (بەکارهێنەر)
                 SelectFilter::make('created_by')
                     ->label('تۆمارکراو لەلایەن')
                     ->relationship('creator', 'name')
-                    ->multiple()
-                    ->searchable()
-                    ->preload()
-                    ->indicator('بەکارهێنەر')
-                    ->columnSpan(1),
+                    ->multiple()->searchable()->preload()
+                    ->indicator('بەکارهێنەر')->columnSpan(1),
 
-                // فلتەری مەودای کاتی تۆمارکردن
                 Filter::make('created_at')
                     ->label('مەودای تۆمارکردن')
                     ->form([
-                        DatePicker::make('from_created')
-                            ->label('لە')
-                            ->displayFormat('Y/m/d')
-                            ->native(false)
-                            ->closeOnDateSelection(),
-                        DatePicker::make('until_created')
-                            ->label('تا')
-                            ->displayFormat('Y/m/d')
-                            ->native(false)
-                            ->closeOnDateSelection()
-                            ->after('from_created'),
+                        DatePicker::make('from_created')->label('لە')->displayFormat('Y/m/d')->native(false)->closeOnDateSelection(),
+                        DatePicker::make('until_created')->label('تا')->displayFormat('Y/m/d')->native(false)->closeOnDateSelection()->after('from_created'),
                     ])
                     ->query(function (Builder $query, array $data) {
                         return $query
-                            ->when(
-                                $data['from_created'],
-                                fn ($q) => $q->whereDate('created_at', '>=', $data['from_created'])
-                            )
-                            ->when(
-                                $data['until_created'],
-                                fn ($q) => $q->whereDate('created_at', '<=', $data['until_created'])
-                            );
+                            ->when($data['from_created'],  fn ($q) => $q->whereDate('created_at', '>=', $data['from_created']))
+                            ->when($data['until_created'], fn ($q) => $q->whereDate('created_at', '<=', $data['until_created']));
                     })
                     ->indicateUsing(function (array $data) {
                         $indicators = [];
-                        if ($data['from_created'] ?? null) {
-                            $indicators[] = 'لە ' . \Carbon\Carbon::parse($data['from_created'])->format('Y/m/d');
-                        }
-                        if ($data['until_created'] ?? null) {
-                            $indicators[] = 'تا ' . \Carbon\Carbon::parse($data['until_created'])->format('Y/m/d');
-                        }
+                        if ($data['from_created']  ?? null) $indicators[] = 'لە ' . Carbon::parse($data['from_created'])->format('Y/m/d');
+                        if ($data['until_created'] ?? null) $indicators[] = 'تا ' . Carbon::parse($data['until_created'])->format('Y/m/d');
                         return $indicators ? 'تۆمارکردن: ' . implode(' - ', $indicators) : null;
                     })
-                    ->columns(2)
-                    ->columnSpan(2),
-
+                    ->columns(2)->columnSpan(2),
             ])
 
-            // ڕێکخستنی فلتەرەکان (وەک FuelPurchaseResource)
-            ->filtersLayout(FiltersLayout::AboveContentCollapsible) // گۆڕدرا بۆ AboveContentCollapsible بۆ ڕێکخستنی باشتر
-            ->filtersFormColumns(3) // ٣ ستوون بۆ ڕێکخستنی باشتر
+            ->filtersLayout(FiltersLayout::AboveContentCollapsible)
+            ->filtersFormColumns(3)
             ->filtersFormWidth('full')
             ->persistFiltersInSession()
             ->deferFilters()
@@ -1052,10 +912,7 @@ class QuickSaleResource extends Resource
 
             ->header(function () {
                 $totals = QuickSale::getTotalsByDate(static::getTodayDate());
-
-                if (!$totals) {
-                    return null;
-                }
+                if (!$totals) return null;
 
                 return new HtmlString('
                     <div class="bg-gray-900 text-white rounded-xl p-4 mb-4 border border-gray-700 shadow-lg">
@@ -1072,7 +929,6 @@ class QuickSaleResource extends Resource
                         </div>
 
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <!-- کۆی گشتی بەیانی -->
                             <div class="bg-gray-800 rounded-lg p-4 border border-gray-700 hover:border-yellow-500 transition-all hover:shadow-xl">
                                 <div class="flex items-center justify-between mb-2">
                                     <div class="flex items-center gap-2">
@@ -1086,22 +942,21 @@ class QuickSaleResource extends Resource
                                 <div class="grid grid-cols-2 gap-2 mt-3">
                                     <div class="bg-gray-700 bg-opacity-50 rounded p-2">
                                         <span class="text-xs text-gray-400 block">کۆی لیتر</span>
-                                        <span class="text-yellow-400 font-bold text-sm">' . number_format($totals['morning']['total_liters']) . ' لیتر</span>
+                                        <span class="text-yellow-400 font-bold text-sm">' . number_format($totals['morning']['total_liters']*2) . ' لیتر</span>
                                     </div>
                                     <div class="bg-gray-700 bg-opacity-50 rounded p-2">
                                         <span class="text-xs text-gray-400 block">کۆی دینار</span>
-                                        <span class="text-yellow-400 font-bold text-sm">' . number_format($totals['morning']['total_amount']) . ' د.ع</span>
+                                        <span class="text-yellow-400 font-bold text-sm">' . number_format($totals['morning']['total_amount']*-1) . ' د.ع</span>
                                     </div>
                                 </div>
                                 <div class="mt-2 pt-2 border-t border-gray-700">
                                     <div class="flex justify-between text-xs">
                                         <span class="text-gray-400">تێکڕا:</span>
-                                        <span class="font-bold text-yellow-400">' . number_format($totals['morning']['total_amount'] / max(1, $totals['morning']['count'])) . ' د.ع</span>
+                                        <span class="font-bold text-yellow-400">' . number_format(($totals['morning']['total_amount'] / max(1, $totals['morning']['count']))*-1) . ' د.ع</span>
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- کۆی گشتی ئێوارە -->
                             <div class="bg-gray-800 rounded-lg p-4 border border-gray-700 hover:border-indigo-500 transition-all hover:shadow-xl">
                                 <div class="flex items-center justify-between mb-2">
                                     <div class="flex items-center gap-2">
@@ -1115,22 +970,21 @@ class QuickSaleResource extends Resource
                                 <div class="grid grid-cols-2 gap-2 mt-3">
                                     <div class="bg-gray-700 bg-opacity-50 rounded p-2">
                                         <span class="text-xs text-gray-400 block">کۆی لیتر</span>
-                                        <span class="text-indigo-400 font-bold text-sm">' . number_format($totals['evening']['total_liters']) . ' لیتر</span>
+                                        <span class="text-indigo-400 font-bold text-sm">' . number_format($totals['evening']['total_liters']*2) . ' لیتر</span>
                                     </div>
                                     <div class="bg-gray-700 bg-opacity-50 rounded p-2">
                                         <span class="text-xs text-gray-400 block">کۆی دینار</span>
-                                        <span class="text-indigo-400 font-bold text-sm">' . number_format($totals['evening']['total_amount']) . ' د.ع</span>
+                                        <span class="text-indigo-400 font-bold text-sm">' . number_format($totals['evening']['total_amount']*-1) . ' د.ع</span>
                                     </div>
                                 </div>
                                 <div class="mt-2 pt-2 border-t border-gray-700">
                                     <div class="flex justify-between text-xs">
                                         <span class="text-gray-400">تێکڕا:</span>
-                                        <span class="font-bold text-indigo-400">' . number_format($totals['evening']['total_amount'] / max(1, $totals['evening']['count'])) . ' د.ع</span>
+                                        <span class="font-bold text-indigo-400">' . number_format(($totals['evening']['total_amount'] / max(1, $totals['evening']['count']))*-1) . ' د.ع</span>
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- کۆی گشتی هەردوو شەفت -->
                             <div class="bg-gray-800 rounded-lg p-4 border border-gray-700 hover:border-green-500 transition-all hover:shadow-xl">
                                 <div class="flex items-center justify-between mb-2">
                                     <div class="flex items-center gap-2">
@@ -1144,11 +998,11 @@ class QuickSaleResource extends Resource
                                 <div class="grid grid-cols-2 gap-2 mt-3">
                                     <div class="bg-gray-700 bg-opacity-50 rounded p-2">
                                         <span class="text-xs text-gray-400 block">کۆی گشتی لیتر</span>
-                                        <span class="text-green-400 font-bold text-sm">' . number_format($totals['morning']['total_liters'] + $totals['evening']['total_liters']) . ' لیتر</span>
+                                        <span class="text-green-400 font-bold text-sm">' . number_format(($totals['morning']['total_liters'] + $totals['evening']['total_liters'])*2) . ' لیتر</span>
                                     </div>
                                     <div class="bg-gray-700 bg-opacity-50 rounded p-2">
                                         <span class="text-xs text-gray-400 block">کۆی گشتی دینار</span>
-                                        <span class="text-green-400 font-bold text-sm">' . number_format($totals['morning']['total_amount'] + $totals['evening']['total_amount']) . ' د.ع</span>
+                                        <span class="text-green-400 font-bold text-sm">' . number_format(($totals['morning']['total_amount'] + $totals['evening']['total_amount'])*-1) . ' د.ع</span>
                                     </div>
                                 </div>
                                 <div class="mt-2 pt-2 border-t border-gray-700">
@@ -1166,14 +1020,10 @@ class QuickSaleResource extends Resource
             ->actions([
                 Tables\Actions\ActionGroup::make([
                     Tables\Actions\ViewAction::make()
-                        ->label('بینین')
-                        ->icon('heroicon-m-eye')
-                        ->color('info'),
+                        ->label('بینین')->icon('heroicon-m-eye')->color('info'),
 
                     Tables\Actions\EditAction::make()
-                        ->label('دەستکاری')
-                        ->icon('heroicon-m-pencil')
-                        ->color('warning'),
+                        ->label('دەستکاری')->icon('heroicon-m-pencil')->color('warning'),
 
                     Action::make('close')
                         ->label('داخستنی شەفت')
@@ -1182,15 +1032,8 @@ class QuickSaleResource extends Resource
                         ->visible(fn ($record): bool => $record && $record->status === 'open')
                         ->requiresConfirmation()
                         ->action(function ($record) {
-                            $record->update([
-                                'status' => 'closed',
-                                'closed_by' => auth()->id(),
-                            ]);
-
-                            Notification::make()
-                                ->title('شەفت بە سەرکەوتوویی داخرا')
-                                ->success()
-                                ->send();
+                            $record->update(['status' => 'closed', 'closed_by' => auth()->id()]);
+                            Notification::make()->title('شەفت بە سەرکەوتوویی داخرا')->success()->send();
                         }),
 
                     Action::make('reopen')
@@ -1200,15 +1043,8 @@ class QuickSaleResource extends Resource
                         ->visible(fn ($record): bool => $record && $record->status === 'closed')
                         ->requiresConfirmation()
                         ->action(function ($record) {
-                            $record->update([
-                                'status' => 'open',
-                                'closed_by' => null,
-                            ]);
-
-                            Notification::make()
-                                ->title('شەفت بە سەرکەوتوویی کرایەوە')
-                                ->success()
-                                ->send();
+                            $record->update(['status' => 'open', 'closed_by' => null]);
+                            Notification::make()->title('شەفت بە سەرکەوتوویی کرایەوە')->success()->send();
                         }),
                 ])
                 ->label('کردارەکان')
@@ -1219,8 +1055,7 @@ class QuickSaleResource extends Resource
 
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make()
-                        ->label('سڕینەوەی دیاریکراوەکان'),
+                    Tables\Actions\DeleteBulkAction::make()->label('سڕینەوەی دیاریکراوەکان'),
                 ]),
             ])
 
@@ -1228,9 +1063,7 @@ class QuickSaleResource extends Resource
             ->emptyStateHeading('هیچ فرۆشی خێرایەک نییە')
             ->emptyStateDescription('یەکەم تۆماری فرۆشی خێرا دروست بکە')
             ->emptyStateActions([
-                Tables\Actions\CreateAction::make()
-                    ->label('دروستکردنی فرۆشی خێرا')
-                    ->icon('heroicon-m-plus'),
+                Tables\Actions\CreateAction::make()->label('دروستکردنی فرۆشی خێرا')->icon('heroicon-m-plus'),
             ])
 
             ->defaultSort('sale_date', 'desc')
@@ -1241,10 +1074,10 @@ class QuickSaleResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index' => Pages\ListQuickSales::route('/'),
+            'index'  => Pages\ListQuickSales::route('/'),
             'create' => Pages\CreateQuickSale::route('/create'),
-            'edit' => Pages\EditQuickSale::route('/{record}/edit'),
-            'view' => Pages\ViewQuickSale::route('/{record}'),
+            'edit'   => Pages\EditQuickSale::route('/{record}/edit'),
+            'view'   => Pages\ViewQuickSale::route('/{record}'),
         ];
     }
 }
