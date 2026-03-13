@@ -21,6 +21,7 @@ class Transaction extends Model
         'reference_number',
         'description',
         'transaction_date',
+        'is_income',
         'created_by'
     ];
 
@@ -29,6 +30,7 @@ class Transaction extends Model
         'balance_before' => 'decimal:2',
         'balance_after' => 'decimal:2',
         'transaction_date' => 'date',
+        'is_income' => 'boolean',
     ];
 
     public function transactionable(): MorphTo
@@ -42,12 +44,12 @@ class Transaction extends Model
             'purchase' => 'کڕین',
             'sale' => 'فرۆشتن',
             'expense' => 'خەرجی',
+            'income' => 'داهات',
             'salary' => 'مووچە',
+            'salary_refund' => 'گەڕاندنەوەی مووچە',
             'penalty' => 'سزا',
             'capital_add' => 'زیادکردنی سەرمایە',
             'capital_withdraw' => 'کەمکردنەوەی سەرمایە',
-            'cash_add' => 'زیادکردنی پارە',
-            'cash_withdraw' => 'کەمکردنەوەی پارە',
             'credit_payment' => 'دانەوەی قەرز',
             default => $this->type,
         };
@@ -59,25 +61,15 @@ class Transaction extends Model
             'purchase' => 'warning',
             'sale' => 'success',
             'expense' => 'danger',
+            'income' => 'success',
             'salary' => 'info',
+            'salary_refund' => 'success',
             'penalty' => 'danger',
             'capital_add' => 'success',
             'capital_withdraw' => 'danger',
-            'cash_add' => 'success',
-            'cash_withdraw' => 'danger',
             'credit_payment' => 'success',
             default => 'gray',
         };
-    }
-
-    public function getIsIncomeAttribute(): bool
-    {
-        return in_array($this->type, ['sale', 'cash_add', 'capital_add', 'credit_payment']);
-    }
-
-    public function getIsExpenseAttribute(): bool
-    {
-        return in_array($this->type, ['purchase', 'expense', 'salary', 'penalty', 'cash_withdraw', 'capital_withdraw']);
     }
 
     public static function generateTransactionNumber(): string
@@ -92,47 +84,5 @@ class Transaction extends Model
         $number = str_pad($lastTransaction + 1, 4, '0', STR_PAD_LEFT);
 
         return "{$prefix}-{$year}{$month}-{$number}";
-    }
-
-    public static function recordTransaction($data)
-    {
-        $cash = Cash::first();
-
-        if (!$cash) {
-            $cash = Cash::create([
-                'balance' => 0,
-                'total_income' => 0,
-                'total_expense' => 0,
-                'capital' => 0,
-                'profit' => 0,
-                'last_update' => now(),
-            ]);
-        }
-
-        $balanceBefore = $cash->balance;
-
-        if ($data['is_income'] ?? false) {
-            $cash->balance += $data['amount'];
-            $cash->total_income += $data['amount'];
-        } else {
-            $cash->balance -= $data['amount'];
-            $cash->total_expense += $data['amount'];
-        }
-        $cash->last_update = now();
-        $cash->save();
-
-        return self::create([
-            'transaction_number' => self::generateTransactionNumber(),
-            'type' => $data['type'],
-            'amount' => $data['amount'],
-            'balance_before' => $balanceBefore,
-            'balance_after' => $cash->balance,
-            'transactionable_type' => $data['transactionable_type'] ?? null,
-            'transactionable_id' => $data['transactionable_id'] ?? null,
-            'reference_number' => $data['reference_number'] ?? null,
-            'description' => $data['description'] ?? null,
-            'transaction_date' => $data['transaction_date'] ?? now(),
-            'created_by' => auth()->user()?->name ?? 'سیستەم',
-        ]);
     }
 }

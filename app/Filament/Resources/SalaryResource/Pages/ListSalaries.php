@@ -1,5 +1,5 @@
 <?php
-
+// app/Filament/Resources/SalaryResource/Pages/ListSalaries.php
 namespace App\Filament\Resources\SalaryResource\Pages;
 
 use App\Filament\Resources\SalaryResource;
@@ -13,7 +13,9 @@ class ListSalaries extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make(),
+            Actions\CreateAction::make()
+                ->label('مووچەی نوێ')
+                ->icon('heroicon-m-plus'),
         ];
     }
 }

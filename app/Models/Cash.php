@@ -39,7 +39,7 @@ class Cash extends Model
     }
 
     /**
-     * زیادکردنی سەرمایە - بەبێ تۆمارکردنی دووبارە لە Transaction
+     * زیادکردنی سەرمایە
      */
     public function addCapital($amount, $description = null, $date = null)
     {
@@ -51,24 +51,23 @@ class Cash extends Model
         $this->last_update = now();
         $this->save();
 
-        // تۆمارکردنی مامەڵە - تەنها بۆ ڕاپۆرت، قاسە ناگۆڕێتەوە
-Transaction::create([
-    'transaction_number' => Transaction::generateTransactionNumber(),
-    'type' => 'capital_add', // دڵنیابە لەوەی ئەمە stringـە
-    'amount' => $amount,
-    'balance_before' => $balanceBefore,
-    'balance_after' => $this->balance,
-    'description' => $description ?? 'زیادکردنی سەرمایە',
-    'transaction_date' => $date ?? now(),
-    'created_by' => auth()->user()?->name ?? 'سیستەم',
-]);
+        Transaction::create([
+            'transaction_number' => Transaction::generateTransactionNumber(),
+            'type' => 'capital_add',
+            'amount' => $amount,
+            'balance_before' => $balanceBefore,
+            'balance_after' => $this->balance,
+            'description' => $description ?? 'زیادکردنی سەرمایە',
+            'transaction_date' => $date ?? now(),
+            'is_income' => true,
+            'created_by' => auth()->user()?->name ?? 'سیستەم',
+        ]);
 
         return $this;
     }
 
-
     /**
-     * کەمکردنەوەی سەرمایە - بەبێ تۆمارکردنی دووبارە
+     * کەمکردنەوەی سەرمایە
      */
     public function withdrawCapital($amount, $description = null, $date = null)
     {
@@ -92,6 +91,7 @@ Transaction::create([
             'balance_after' => $this->balance,
             'description' => $description ?? 'کەمکردنەوەی سەرمایە',
             'transaction_date' => $date ?? now(),
+            'is_income' => false,
             'created_by' => auth()->user()?->name ?? 'سیستەم',
         ]);
 
@@ -99,39 +99,9 @@ Transaction::create([
     }
 
     /**
-     * زیادکردنی پارە بۆ قاسە (داهات) - بەبێ تۆمارکردنی دووبارە
+     * زیادکردنی داهات
      */
-    public function addIncome($amount, $description = null)
-    {
-        $balanceBefore = $this->balance;
-
-        $this->balance += $amount;
-        $this->total_income += $amount;
-        $this->last_update = now();
-        $this->save();
-
-        return $this;
-    }
-
-    /**
-     * زیادکردنی خەرجی (کەمکردنەوەی پارە لە قاسە) - بەبێ تۆمارکردنی دووبارە
-     */
-    public function addExpense($amount, $description = null)
-    {
-        $balanceBefore = $this->balance;
-
-        $this->balance -= $amount;
-        $this->total_expense += $amount;
-        $this->last_update = now();
-        $this->save();
-
-        return $this;
-    }
-
-    /**
-     * زیادکردنی پارە بۆ قاسە - بەبێ تۆمارکردنی دووبارە
-     */
-    public function addMoney($amount, $description = null, $date = null)
+    public function addIncome($amount, $description = null, $date = null)
     {
         $balanceBefore = $this->balance;
 
@@ -142,12 +112,13 @@ Transaction::create([
 
         Transaction::create([
             'transaction_number' => Transaction::generateTransactionNumber(),
-            'type' => 'cash_add',
+            'type' => 'income',
             'amount' => $amount,
             'balance_before' => $balanceBefore,
             'balance_after' => $this->balance,
-            'description' => $description ?? 'زیادکردنی پارە بۆ قاسە',
+            'description' => $description ?? 'زیادکردنی داهات',
             'transaction_date' => $date ?? now(),
+            'is_income' => true,
             'created_by' => auth()->user()?->name ?? 'سیستەم',
         ]);
 
@@ -155,14 +126,10 @@ Transaction::create([
     }
 
     /**
-     * کەمکردنەوەی پارە لە قاسە - بەبێ تۆمارکردنی دووبارە
+     * زیادکردنی خەرجی
      */
-    public function withdrawMoney($amount, $description = null, $date = null)
+    public function addExpense($amount, $description = null, $date = null)
     {
-        if ($this->balance < $amount) {
-            throw new \Exception('پارەی پێویست لە قاسەدا نییە');
-        }
-
         $balanceBefore = $this->balance;
 
         $this->balance -= $amount;
@@ -172,12 +139,13 @@ Transaction::create([
 
         Transaction::create([
             'transaction_number' => Transaction::generateTransactionNumber(),
-            'type' => 'cash_withdraw',
+            'type' => 'expense',
             'amount' => $amount,
             'balance_before' => $balanceBefore,
             'balance_after' => $this->balance,
-            'description' => $description ?? 'کەمکردنەوەی پارە لە قاسە',
+            'description' => $description ?? 'زیادکردنی خەرجی',
             'transaction_date' => $date ?? now(),
+            'is_income' => false,
             'created_by' => auth()->user()?->name ?? 'سیستەم',
         ]);
 
@@ -220,7 +188,4 @@ Transaction::create([
             'last_update' => now(),
         ]);
     }
-
-
-
 }

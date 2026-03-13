@@ -1,5 +1,5 @@
 <?php
-
+// app/Filament/Resources/SalaryResource/Pages/EditSalary.php
 namespace App\Filament\Resources\SalaryResource\Pages;
 
 use App\Filament\Resources\SalaryResource;
@@ -13,12 +13,19 @@ class EditSalary extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            Actions\DeleteAction::make(),
+            Actions\DeleteAction::make()
+                ->label('سڕینەوە')
+                ->icon('heroicon-m-trash'),
         ];
     }
 
-     protected function getRedirectUrl(): string
+    protected function getRedirectUrl(): string
     {
         return $this->getResource()::getUrl('index');
+    }
+
+    protected function getSavedNotificationTitle(): ?string
+    {
+        return 'مووچە بە سەرکەوتوویی نوێ کرا';
     }
 }

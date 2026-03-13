@@ -49,58 +49,104 @@ class Salary extends Model
     protected static function booted()
     {
         static::creating(function ($salary) {
-            // دڵنیابە لەوەی net_amount حساب کراوە
+            // حسابکردنی مووچەی پاک (net_amount)
             if (!$salary->net_amount && $salary->amount) {
                 $salary->net_amount = $salary->amount - ($salary->deductions ?? 0);
             }
         });
 
-// app/Models/Salary.php - بەشی created event
+        // **چاککردن: تەنها یەک جار پارە کەم بکەرەوە**
+        static::created(function ($salary) {
+            try {
+                // دڵنیابوون لە بوونی قاسە
+                $cash = Cash::first();
+                if (!$cash) {
+                    $cash = Cash::create([
+                        'balance' => 0,
+                        'total_income' => 0,
+                        'total_expense' => 0,
+                        'capital' => 0,
+                        'profit' => 0,
+                        'last_update' => now(),
+                    ]);
+                }
 
-static::created(function ($salary) {
-    try {
-        // کەمکردنەوەی پارە لە قاسە
-        $cash = Cash::first();
-        if (!$cash) {
-            $cash = Cash::create([
-                'balance' => 0,
-                'total_income' => 0,
-                'total_expense' => 0,
-                'last_update' => now(),
-            ]);
-        }
+                // **بەکارهێنانی net_amount نەک amount (بۆ ڕەچاوکردنی سزا)**
+                $amountToDeduct = $salary->net_amount; // ئەمە مووچەی پاکە (مووچە - سزا)
 
-        // تەنها یەک جار پارە کەم بکەرەوە
-        $cash->addExpense($salary->amount);
+                // **تەنها یەک جار: کەمکردنەوەی پارە لە قاسە**
+                $balanceBefore = $cash->balance;
+                $cash->balance -= $amountToDeduct;
+                $cash->total_expense += $amountToDeduct;
+                $cash->last_update = now();
+                $cash->save();
 
-        // تۆمارکردنی مامەڵە لە خشتەی transactions - بەبێ دووبارە کردنی addExpense
-        $monthNames = [
-            '1' => 'ڕێبەندان', '2' => 'ڕەشەمە', '3' => 'نەورۆز',
-            '4' => 'گوڵان', '5' => 'جۆزەردان', '6' => 'پووشپەڕ',
-            '7' => 'گەلاوێژ', '8' => 'خەرمانان', '9' => 'ڕەزبەر',
-            '10' => 'گەڵاڕێزان', '11' => 'سەرماوەز', '12' => 'بەفرانبار',
-        ];
+                // ناوی مانگ بۆ وەسف
+                $monthNames = [
+                    '1' => 'ڕێبەندان', '2' => 'ڕەشەمە', '3' => 'نەورۆز',
+                    '4' => 'گوڵان', '5' => 'جۆزەردان', '6' => 'پووشپەڕ',
+                    '7' => 'گەلاوێژ', '8' => 'خەرمانان', '9' => 'ڕەزبەر',
+                    '10' => 'گەڵاڕێزان', '11' => 'سەرماوەز', '12' => 'بەفرانبار',
+                ];
+                $monthName = $monthNames[$salary->month] ?? 'مانگ ' . $salary->month;
 
-        $monthName = $monthNames[$salary->month] ?? 'مانگ ' . $salary->month;
+                // **دروستکردنی transaction تەنها بۆ تۆمار، بەبێ گۆڕینی قاسە**
+                Transaction::create([
+                    'transaction_number' => Transaction::generateTransactionNumber(),
+                    'type' => 'salary',
+                    'amount' => $amountToDeduct,
+                    'balance_before' => $balanceBefore,
+                    'balance_after' => $cash->balance,
+                    'transactionable_type' => self::class,
+                    'transactionable_id' => $salary->id,
+                    'reference_number' => (string) $salary->employee_id,
+                    'description' => 'مووچەی ' . ($salary->employee->name ?? 'کارمەند') .
+                                     ' بۆ مانگی ' . $monthName . 'ی ' . $salary->year .
+                                     ($salary->deductions > 0 ? ' (سزا: ' . number_format($salary->deductions) . ' دینار)' : '') .
+                                     ($salary->notes ? ' - ' . $salary->notes : ''),
+                    'transaction_date' => $salary->payment_date,
+                    'is_income' => false,
+                    'created_by' => auth()->user()?->name ?? 'سیستەم',
+                ]);
 
-        // ڕاستەوخۆ Transaction دروست بکە، بەبێ بەکارهێنانی recordTransaction
-        // ئەگەر recordTransaction دووبارە addExpense بانگ دەکات
-        Transaction::create([
-            'type' => 'salary',
-            'amount' => $salary->amount,
-            'transactionable_type' => self::class,
-            'transactionable_id' => $salary->id,
-            'reference_number' => $salary->employee_id,
-            'description' => 'مووچەی ' . ($salary->employee->name ?? 'کارمەند') . ' بۆ مانگی ' . $monthName . 'ی ' . $salary->year . ($salary->notes ? ' - ' . $salary->notes : ''),
-            'transaction_date' => $salary->payment_date,
-            'is_income' => false,
-        ]);
+            } catch (\Exception $e) {
+                Log::error('Error in Salary created event: ' . $e->getMessage());
+            }
+        });
 
-    } catch (\Exception $e) {
-        Log::error('Error in Salary created event: ' . $e->getMessage());
+        // **کاتێک مووچە دەسڕێتەوە، پارە بگەڕێنەرەوە قاسە**
+        static::deleted(function ($salary) {
+            try {
+                $cash = Cash::first();
+                if ($cash) {
+                    // گەڕاندنەوەی پارە بۆ قاسە
+                    $amountToAdd = $salary->net_amount;
+
+                    $balanceBefore = $cash->balance;
+                    $cash->balance += $amountToAdd;
+                    $cash->total_income += $amountToAdd; // وەک داهات تۆمار دەکرێت کاتێک دەسڕێتەوە
+                    $cash->last_update = now();
+                    $cash->save();
+
+                    // تۆمارکردنی transaction بۆ سڕینەوە
+                    Transaction::create([
+                        'transaction_number' => Transaction::generateTransactionNumber(),
+                        'type' => 'salary_refund',
+                        'amount' => $amountToAdd,
+                        'balance_before' => $balanceBefore,
+                        'balance_after' => $cash->balance,
+                        'transactionable_type' => self::class,
+                        'transactionable_id' => $salary->id,
+                        'reference_number' => (string) $salary->employee_id,
+                        'description' => 'گەڕاندنەوەی مووچە - سڕینەوە',
+                        'transaction_date' => now(),
+                        'is_income' => true,
+                        'created_by' => auth()->user()?->name ?? 'سیستەم',
+                    ]);
+                }
+            } catch (\Exception $e) {
+                Log::error('Error in Salary deleted event: ' . $e->getMessage());
+            }
+        });
     }
-});
-    }
-
-
 }
