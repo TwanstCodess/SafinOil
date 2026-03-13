@@ -53,7 +53,7 @@ class EditQuickSale extends EditRecord
         }
 
         $data['total_amount'] = $totalAmount; // ✅ *2
-        $data['total_liters'] = \$totalLiters; // ✅ لیتری تەواو (بەبێ ÷2)
+        $data['total_liters'] = $totalLiters; // ✅ لیتری تەواو (بەبێ ÷2)
 
         return $data;
     }
