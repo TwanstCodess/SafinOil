@@ -33,19 +33,21 @@ class EditQuickSale extends EditRecord
             $data['sale_date'] = Carbon::now()->format('Y-m-d');
         }
 
-        // total_amount و total_liters لە فۆرم حساب دەکرێت بۆ نیشاندان
-        // بەڵام ڕاستەقینەی حسابکردن لە applyDifferencesToStockAndCash() دەکرێت
         $totalAmount = 0;
         $totalLiters = 0;
 
         foreach (Category::all() as $category) {
-            $catId   = $category->id;
-            $initial = floatval($data['initial_readings'][$catId] ?? 0);
-            $final   = floatval($data['final_readings'][$catId]   ?? 0);
-            $sold    = $initial - $final;
+            $catId    = $category->id;
+            $initial  = floatval($data['initial_readings'][$catId] ?? 0);
+            $final    = floatval($data['final_readings'][$catId]   ?? 0);
+            $fullDiff = $initial - $final;
 
-            $totalAmount += $sold * floatval($category->current_price);
-            $totalLiters += $sold;
+            // ✅ پێویستە / 2 بێت — خوێندنەوەکان کۆی هەردوو لای پەمپن
+            $soldLiters = $fullDiff / 2;
+            $soldAmount = ($fullDiff * floatval($category->current_price)) / 2;
+
+            $totalAmount += $soldAmount;
+            $totalLiters += $soldLiters;
         }
 
         $data['total_amount'] = $totalAmount;
@@ -57,20 +59,14 @@ class EditQuickSale extends EditRecord
     protected function afterSave(): void
     {
         try {
-            // *** تەنها بۆ شەفتی ئەمە applyDifferencesToStockAndCash() بگرێتەوە ***
-            // شەفتی ئێوارە هەرگیز لێرەوە نагرێتەوە
             $result = $this->record->applyDifferencesToStockAndCash();
 
-            // ئەگەر شەفتی بەیانی داخرا:
-            // تەنها initial_readings ی شەفتی ئێوارە نوێ بکەوە
-            // *** applyDifferencesToStockAndCash بۆ ئێوارە ناگرێتەوە ***
             if ($this->record->shift === 'morning' && $this->record->status === 'closed') {
                 $eveningShift = QuickSale::whereDate('sale_date', $this->record->sale_date)
                     ->where('shift', 'evening')
                     ->first();
 
                 if ($eveningShift && $eveningShift->status === 'open') {
-                    // saveQuietly بەکاربێنە بۆ ئەوەی afterSave() ی ئێوارە trigger نەبێت
                     $eveningShift->initial_readings = $this->record->final_readings;
                     $eveningShift->saveQuietly();
 
