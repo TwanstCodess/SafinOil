@@ -26,6 +26,12 @@ class TransactionResource extends Resource
     protected static ?string $pluralModelLabel = 'مامەڵە داراییەکان';
     protected static ?string $recordTitleAttribute = 'transaction_number';
 
+    // ✅ هەلمەتی پشکنین — ئایا جۆری مامەڵە فرۆشی خێرایە
+    private static function isQuickSale(Transaction $record): bool
+    {
+        return in_array($record->type, ['quick_sale', 'quick_sale_difference']);
+    }
+
     public static function form(Form $form): Form
     {
         return $form
@@ -36,25 +42,27 @@ class TransactionResource extends Resource
                             ->label('ژمارەی مامەڵە')
                             ->disabled()
                             ->dehydrated(false),
+
                         Forms\Components\Select::make('type')
                             ->label('جۆری مامەڵە')
                             ->options([
-                                'purchase'          => '📦 کڕین',
-                                'sale'              => '🛒 فرۆشتن',
-                                'quick_sale'        => '⚡ فرۆشی خێرا',
-                                'quick_sale_difference' => '⚡ جیاوازی فرۆشی خێرا',
-                                'expense'           => '📉 خەرجی',
-                                'salary'            => '👤 مووچە',
-                                'penalty'           => '⚠️ سزا',
-                                'capital_add'       => '💰 زیادکردنی سەرمایە',
-                                'capital_withdraw'  => '💸 کەمکردنەوەی سەرمایە',
-                                'cash_add'          => '💵 زیادکردنی پارە',
-                                'cash_withdraw'     => '🏧 کەمکردنەوەی پارە',
-                                'credit_payment'    => '💳 دانەوەی قەرز',
+                                'purchase'               => '📦 کڕین',
+                                'sale'                   => '🛒 فرۆشتن',
+                                'quick_sale'             => '⚡ فرۆشی خێرا',
+                                'quick_sale_difference'  => '⚡ جیاوازی فرۆشی خێرا',
+                                'expense'                => '📉 خەرجی',
+                                'salary'                 => '👤 مووچە',
+                                'penalty'                => '⚠️ سزا',
+                                'capital_add'            => '💰 زیادکردنی سەرمایە',
+                                'capital_withdraw'       => '💸 کەمکردنەوەی سەرمایە',
+                                'cash_add'               => '💵 زیادکردنی پارە',
+                                'cash_withdraw'          => '🏧 کەمکردنەوەی پارە',
+                                'credit_payment'         => '💳 دانەوەی قەرز',
                             ])
                             ->required()
                             ->disabled()
                             ->dehydrated(false),
+
                         Forms\Components\TextInput::make('amount')
                             ->label('بڕی پارە')
                             ->numeric()
@@ -62,6 +70,7 @@ class TransactionResource extends Resource
                             ->prefix('دینار')
                             ->disabled()
                             ->dehydrated(false),
+
                         Forms\Components\Grid::make(2)
                             ->schema([
                                 Forms\Components\TextInput::make('balance_before')
@@ -77,20 +86,24 @@ class TransactionResource extends Resource
                                     ->disabled()
                                     ->dehydrated(false),
                             ]),
+
                         Forms\Components\TextInput::make('reference_number')
                             ->label('ژمارەی سەرچاوە')
                             ->disabled()
                             ->dehydrated(false),
+
                         Forms\Components\Textarea::make('description')
                             ->label('وەسف')
                             ->disabled()
                             ->dehydrated(false)
                             ->columnSpanFull(),
+
                         Forms\Components\DatePicker::make('transaction_date')
                             ->label('ڕێکەوتی مامەڵە')
                             ->required()
                             ->disabled()
                             ->dehydrated(false),
+
                         Forms\Components\TextInput::make('created_by')
                             ->label('دروستکراو لەلایەن')
                             ->disabled()
@@ -118,17 +131,15 @@ class TransactionResource extends Resource
                     ->searchable()
                     ->sortable(),
 
-                // *** ستوونی بڕی پارە ***
-                // ئەگەر جۆری quick_sale_difference بوو، بڕەکە × 2 نیشان دەدرێت
-                // چونکە لیتری DB ÷ 2 کرابوو، بەڵام پارەی ڕاستەقینە = بڕی DB × 2
+                // ✅ پارە: ئەگەر فرۆشی خێرا بوو × 2
                 Tables\Columns\TextColumn::make('amount')
                     ->label('بڕی پارە')
                     ->formatStateUsing(function ($state, Transaction $record): string {
-                        $amount = $record->type === 'quick_sale_difference'
+                        $amount = self::isQuickSale($record)
                             ? floatval($state) * 2
                             : floatval($state);
 
-                        return number_format($amount) . ' د.ع';
+                        return number_format(abs($amount)) . ' د.ع';
                     })
                     ->sortable()
                     ->color(fn (Transaction $record): string =>
@@ -136,6 +147,35 @@ class TransactionResource extends Resource
                     )
                     ->weight('bold')
                     ->size(Tables\Columns\TextColumn\TextColumnSize::Medium),
+
+                // ✅ وەسف: ئەگەر فرۆشی خێرا بوو لیتر × 2 نیشان دەدرێت
+                Tables\Columns\TextColumn::make('description')
+                    ->label('وەسف')
+                    ->formatStateUsing(function ($state, Transaction $record): string {
+                        if (!self::isQuickSale($record) || empty($state)) {
+                            return $state ?? '';
+                        }
+
+                        // ✅ لیترەکە لە وەسفەکەدا دەگۆڕدرێت × 2
+                        // نموونە: "فرۆشتن - 50L بنزین" → "فرۆشتن - 100L بنزین"
+                        return preg_replace_callback(
+                            '/(\d+(?:\.\d+)?)L/',
+                            fn ($matches) => number_format(floatval($matches[1]) * 2, 0) . 'L',
+                            $state
+                        );
+                    })
+                    ->limit(40)
+                    ->tooltip(function ($state, Transaction $record): string {
+                        if (!self::isQuickSale($record) || empty($state)) {
+                            return $state ?? '';
+                        }
+                        return preg_replace_callback(
+                            '/(\d+(?:\.\d+)?)L/',
+                            fn ($matches) => number_format(floatval($matches[1]) * 2, 0) . 'L',
+                            $state
+                        );
+                    })
+                    ->toggleable(),
 
                 Tables\Columns\TextColumn::make('balance_before')
                     ->label('پێش')
@@ -152,12 +192,6 @@ class TransactionResource extends Resource
                 Tables\Columns\TextColumn::make('reference_number')
                     ->label('ژ. سەرچاوە')
                     ->searchable()
-                    ->toggleable(),
-
-                Tables\Columns\TextColumn::make('description')
-                    ->label('وەسف')
-                    ->limit(30)
-                    ->tooltip(fn ($state): string => $state ?? '')
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('transaction_date')
@@ -181,18 +215,18 @@ class TransactionResource extends Resource
                 SelectFilter::make('type')
                     ->label('جۆری مامەڵە')
                     ->options([
-                        'purchase'          => '📦 کڕین',
-                        'sale'              => '🛒 فرۆشتن',
-                        'quick_sale'        => '⚡ فرۆشی خێرا',
-                        'quick_sale_difference' => '⚡ جیاوازی فرۆشی خێرا',
-                        'expense'           => '📉 خەرجی',
-                        'salary'            => '👤 مووچە',
-                        'penalty'           => '⚠️ سزا',
-                        'capital_add'       => '💰 زیادکردنی سەرمایە',
-                        'capital_withdraw'  => '💸 کەمکردنەوەی سەرمایە',
-                        'cash_add'          => '💵 زیادکردنی پارە',
-                        'cash_withdraw'     => '🏧 کەمکردنەوەی پارە',
-                        'credit_payment'    => '💳 دانەوەی قەرز',
+                        'purchase'               => '📦 کڕین',
+                        'sale'                   => '🛒 فرۆشتن',
+                        'quick_sale'             => '⚡ فرۆشی خێرا',
+                        'quick_sale_difference'  => '⚡ جیاوازی فرۆشی خێرا',
+                        'expense'                => '📉 خەرجی',
+                        'salary'                 => '👤 مووچە',
+                        'penalty'                => '⚠️ سزا',
+                        'capital_add'            => '💰 زیادکردنی سەرمایە',
+                        'capital_withdraw'       => '💸 کەمکردنەوەی سەرمایە',
+                        'cash_add'               => '💵 زیادکردنی پارە',
+                        'cash_withdraw'          => '🏧 کەمکردنەوەی پارە',
+                        'credit_payment'         => '💳 دانەوەی قەرز',
                     ])
                     ->multiple()
                     ->searchable()
@@ -350,32 +384,27 @@ class TransactionResource extends Resource
                     ->columnSpan(1),
 
                 Filter::make('today')
-                    ->label('مامەڵەکانی ئەمڕۆ')
-                    ->toggle()
+                    ->label('مامەڵەکانی ئەمڕۆ')->toggle()
                     ->query(fn ($query) => $query->whereDate('transaction_date', today()))
                     ->indicator('ئەمڕۆ'),
 
                 Filter::make('yesterday')
-                    ->label('مامەڵەکانی دوێنێ')
-                    ->toggle()
+                    ->label('مامەڵەکانی دوێنێ')->toggle()
                     ->query(fn ($query) => $query->whereDate('transaction_date', today()->subDay()))
                     ->indicator('دوێنێ'),
 
                 Filter::make('this_week')
-                    ->label('مامەڵەکانی ئەم هەفتەیە')
-                    ->toggle()
+                    ->label('مامەڵەکانی ئەم هەفتەیە')->toggle()
                     ->query(fn ($query) => $query->whereBetween('transaction_date', [now()->startOfWeek(), now()->endOfWeek()]))
                     ->indicator('ئەم هەفتەیە'),
 
                 Filter::make('this_month')
-                    ->label('مامەڵەکانی ئەم مانگە')
-                    ->toggle()
+                    ->label('مامەڵەکانی ئەم مانگە')->toggle()
                     ->query(fn ($query) => $query->whereMonth('transaction_date', now()->month)->whereYear('transaction_date', now()->year))
                     ->indicator('ئەم مانگە'),
 
                 Filter::make('this_year')
-                    ->label('مامەڵەکانی ئەمساڵ')
-                    ->toggle()
+                    ->label('مامەڵەکانی ئەمساڵ')->toggle()
                     ->query(fn ($query) => $query->whereYear('transaction_date', now()->year))
                     ->indicator('ئەمساڵ'),
 
