@@ -10,26 +10,30 @@ return new class extends Migration
     {
         Schema::create('quick_sales', function (Blueprint $table) {
             $table->id();
-            $table->date('sale_date')->unique();
+
+            $table->date('sale_date');
+            // ✅ هەر ڕۆژ دەتوانێت ٢ ریکۆرد هەبێت: بەیانی + ئێوارە
+            $table->enum('shift', ['morning', 'evening'])->default('morning');
+            $table->unique(['sale_date', 'shift']);
+
             $table->enum('status', ['open', 'closed'])->default('open');
 
-            // JSON بۆ هەڵگرتنی داتای کاتیگۆریەکان
             $table->json('categories_data')->nullable();
-
-            // داتای سەرەتایی
             $table->json('initial_readings')->nullable();
-
-            // داتای کۆتایی
             $table->json('final_readings')->nullable();
 
-            // فرۆشراوەکان
+            // فرۆشراوی حسابکراو لە readings
             $table->json('sold_data')->nullable();
 
-            // جیاوازیەکان
+            // فرۆشراوی تۆمارکراو لە کارمەند
+            $table->json('reported_sold')->nullable();
+
+            // جیاوازی نێوان sold_data و reported_sold
             $table->json('differences')->nullable();
 
-            // کۆی گشتی
+            // ✅ هەردووکیان پاش ÷ 2 تۆمار دەکرێن — هەرگیز دوو جار نابێت
             $table->decimal('total_amount', 15, 2)->default(0);
+            $table->decimal('total_liters', 15, 2)->default(0);
 
             $table->foreignId('closed_by')->nullable()->constrained('users')->nullOnDelete();
             $table->foreignId('created_by')->constrained('users');

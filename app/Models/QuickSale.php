@@ -195,8 +195,8 @@ class QuickSale extends Model
     /**
      * حسابکردنی فرۆشراوی هەر کاتیگۆریەک
      *
-     * @ IMPORTANT:
-     * - خوێندنەوەکان (initial - final) بریتیە لە کۆی هەردوو لای پەمپ
+     * IMPORTANT:
+     * - خوێندنەوەکان (initial - final) = کۆی هەردوو لای پەمپ
      * - فرۆشتنی ڕاستەقینە بۆ یەک شەفت = (initial - final) / 2
      * - بڕی پارە = (initial - final) × نرخ / 2
      */
@@ -212,15 +212,15 @@ class QuickSale extends Model
             $catId      = $category->id;
             $initialVal = floatval($initial[$catId] ?? 0);
             $finalVal   = floatval($final[$catId]   ?? 0);
+            $fullDiff   = $initialVal - $finalVal;
 
-            $fullDiff = $initialVal - $finalVal;
+            // ✅ ÷ 2 چونکە خوێندنەوەکان کۆی هەردوو لای پەمپن
+            $soldLiters = $fullDiff / 2;
+            $soldAmount = ($fullDiff * floatval($category->current_price)) / 2;
 
-            $soldLitersForStock = $fullDiff / 2;
-            $soldAmountForShift = ($fullDiff * floatval($category->current_price)) / 2;
-
-            $sold[$catId]  = $soldLitersForStock;
-            $totalAmount  += $soldAmountForShift;
-            $totalLiters  += $soldLitersForStock;
+            $sold[$catId]  = $soldLiters;
+            $totalAmount  += $soldAmount;
+            $totalLiters  += $soldLiters;
         }
 
         $this->sold_data    = $sold;
@@ -252,7 +252,7 @@ class QuickSale extends Model
     // ===================== Stock & Cash =====================
 
     /**
-     * گەڕاندنەوەی مامەڵەکانی پێشوو بۆ دۆخی پێش خۆیان
+     * گەڕاندنەوەی مامەڵەکانی پێشوو
      */
     protected function reverseStockAndCashForPreviousTransactions(): void
     {
@@ -265,10 +265,10 @@ class QuickSale extends Model
             return;
         }
 
-        // ✅ یەک جار قاسەکە بخوێنەوە — دەرەوەی لووپ
+        // ✅ یەک جار بخوێنەوە — دەرەوەی لووپ
         $cash = Cash::first();
 
-        // ✅ کۆی گشتی پارە بژمێرە، دوای لووپ یەک جار کەمی بکەرەوە
+        // ✅ کۆی گشتی کەم بکەرەوە — یەک جار save
         $totalReverseAmount = 0;
 
         foreach ($previousTransactions as $transaction) {
@@ -283,13 +283,12 @@ class QuickSale extends Model
                 }
             }
 
-            // ✅ کۆی پارەکان کۆ بکەوە
             if ($transaction->amount > 0) {
                 $totalReverseAmount += floatval($transaction->amount);
             }
         }
 
-        // ✅ یەک جار کەمی بکەرەوە لە قاسەکە
+        // ✅ یەک جار کەمی بکەرەوە
         if ($cash && $totalReverseAmount > 0) {
             $cash->balance      -= $totalReverseAmount;
             $cash->total_income -= $totalReverseAmount;
@@ -356,7 +355,7 @@ class QuickSale extends Model
 
             $categories = Category::all()->keyBy('id');
 
-            // ✅ یەک جار قاسەکە بخوێنەوە، دوای هەموو حسابەکان یەک جار خەزن بکە
+            // ✅ یەک جار قاسەکە بخوێنەوە
             $cash = Cash::first() ?? Cash::create([
                 'balance'       => 0,
                 'total_income'  => 0,
@@ -366,7 +365,8 @@ class QuickSale extends Model
                 'last_update'   => now(),
             ]);
 
-            $totalCashToAdd = 0; // ✅ کۆی پارەی زیادکراو
+            // ✅ کۆی پارەکان کۆ بکەوە — دوای لووپ یەک جار save
+            $totalCashToAdd = 0;
 
             // گام ١: کۆگا کەم بکەرەوە بەپێی sold_data
             foreach ($sold as $catId => $soldLiters) {
@@ -386,10 +386,10 @@ class QuickSale extends Model
 
                 DB::table('categories')->where('id', $catId)->decrement('stock_liters', $soldLiters);
 
-                // ✅ transaction و sale تۆمار بکە، بەڵام cash لەینجا نەگۆڕە
+                // ✅ تەنها Sale و Transaction — cash لێرەدا نەگۆڕدرێت
                 $this->recordSaleAndTransaction($totalPrice, $category, $soldLiters, 'quick_sale', $cash);
 
-                $totalCashToAdd += $totalPrice; // ✅ کۆ بکەوە
+                $totalCashToAdd += $totalPrice;
 
                 $results['sold_details'][] = [
                     'category_name'   => $category->name,
@@ -426,9 +426,10 @@ class QuickSale extends Model
 
                     DB::table('categories')->where('id', $catId)->decrement('stock_liters', $diff);
 
+                    // ✅ تەنها Sale و Transaction — cash لێرەدا نەگۆڕدرێت
                     $this->recordSaleAndTransaction($totalPrice, $category, $diff, 'quick_sale_difference', $cash);
 
-                    $totalCashToAdd += $totalPrice; // ✅ کۆ بکەوە
+                    $totalCashToAdd += $totalPrice;
 
                     $results['positive'][] = ['category' => $category->name, 'liters' => $diff, 'price' => $totalPrice];
                     $results['total_positive_amount'] += $totalPrice;
@@ -453,10 +454,10 @@ class QuickSale extends Model
 
             // ✅ یەک جار قاسەکە نوێ بکەرەوە — هەرگیز دوو جار نابێت
             if ($totalCashToAdd > 0) {
-                $balanceBefore          = floatval($cash->balance);
-                $cash->balance          = $balanceBefore + $totalCashToAdd;
-                $cash->total_income     = floatval($cash->total_income) + $totalCashToAdd;
-                $cash->last_update      = now();
+                $balanceBefore      = floatval($cash->balance);
+                $cash->balance      = $balanceBefore + $totalCashToAdd;
+                $cash->total_income = floatval($cash->total_income) + $totalCashToAdd;
+                $cash->last_update  = now();
                 $cash->save();
 
                 Log::info("QuickSale ID {$this->id}: قاسە نوێکرایەوە — +{$totalCashToAdd} دینار");
@@ -478,8 +479,8 @@ class QuickSale extends Model
     }
 
     /**
-     * ✅ تەنها تۆمارکردنی Sale و Transaction — قاسە لێرەدا نەگۆڕدرێت
-     * پارەکانی قاسە لە applyDifferencesToStockAndCash یەک جار تۆمار دەکرێن
+     * ✅ تەنها تۆمارکردنی Sale و Transaction
+     * قاسە لێرەدا نەگۆڕدرێت — لە applyDifferencesToStockAndCash یەک جار تۆمار دەکرێت
      */
     protected function recordSaleAndTransaction(
         float    $amount,
@@ -492,13 +493,12 @@ class QuickSale extends Model
             ? "جیاوازی - {$liters}L {$category->name} - {$this->shift_name}"
             : "فرۆشتن - {$liters}L {$category->name} - {$this->shift_name}";
 
-        // ✅ balance_before و balance_after تەنها بۆ تۆماری تاریخچە بەکاردێت، cash نەگۆڕدرێت
         $transaction = Transaction::create([
             'transaction_number' => Transaction::generateTransactionNumber(),
             'type'               => $transactionType,
             'amount'             => $amount,
             'balance_before'     => floatval($cash->balance),
-            'balance_after'      => floatval($cash->balance) + $amount, // تەنها بۆ تۆمار
+            'balance_after'      => floatval($cash->balance) + $amount,
             'reference_number'   => $this->id,
             'description'        => $description,
             'transaction_date'   => $this->sale_date,
