@@ -54,18 +54,6 @@ class FinancialOverviewWidget extends BaseWidget
                 ->color('success')
                 ->chart([10, 8, 12, 6, 14, 9, 11]),
 
-            Stat::make('قازانجی خاوێن', $this->formatMoney($cash->profit ?? 0))
-                ->description('کۆی داهات - کۆی خەرجی')
-                ->descriptionIcon('heroicon-m-chart-bar')
-                ->color($cash->profit >= 0 ? 'success' : 'danger')
-                ->chart([5, 10, 8, 12, 7, 15, 9]),
-
-            Stat::make('فرۆشتی ئەمڕۆ', $this->formatMoney($todaySales))
-                ->description('کۆی فرۆشتنەکانی ئەمڕۆ')
-                ->descriptionIcon('heroicon-m-shopping-cart')
-                ->color('info')
-                ->chart([3, 5, 2, 6, 4, 7, 3]),
-
             Stat::make('کڕینی ئەمڕۆ', $this->formatMoney($todayPurchases))
                 ->description('کۆی کڕینەکانی ئەمڕۆ')
                 ->descriptionIcon('heroicon-m-truck')
