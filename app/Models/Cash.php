@@ -66,6 +66,7 @@ Transaction::create([
         return $this;
     }
 
+
     /**
      * کەمکردنەوەی سەرمایە - بەبێ تۆمارکردنی دووبارە
      */
@@ -219,4 +220,7 @@ Transaction::create([
             'last_update' => now(),
         ]);
     }
+
+
+
 }

@@ -55,45 +55,52 @@ class Salary extends Model
             }
         });
 
-        static::created(function ($salary) {
-            try {
-                // کەمکردنەوەی پارە لە قاسە
-                $cash = Cash::first();
-                if (!$cash) {
-                    $cash = Cash::create([
-                        'balance' => 0,
-                        'total_income' => 0,
-                        'total_expense' => 0,
-                        'last_update' => now(),
-                    ]);
-                }
+// app/Models/Salary.php - بەشی created event
 
-                $cash->addExpense($salary->net_amount);
+static::created(function ($salary) {
+    try {
+        // کەمکردنەوەی پارە لە قاسە
+        $cash = Cash::first();
+        if (!$cash) {
+            $cash = Cash::create([
+                'balance' => 0,
+                'total_income' => 0,
+                'total_expense' => 0,
+                'last_update' => now(),
+            ]);
+        }
 
-                // تۆمارکردنی مامەڵە لە خشتەی transactions
-                $monthNames = [
-                    '1' => 'ڕێبەندان', '2' => 'ڕەشەمە', '3' => 'نەورۆز',
-                    '4' => 'گوڵان', '5' => 'جۆزەردان', '6' => 'پووشپەڕ',
-                    '7' => 'گەلاوێژ', '8' => 'خەرمانان', '9' => 'ڕەزبەر',
-                    '10' => 'گەڵاڕێزان', '11' => 'سەرماوەز', '12' => 'بەفرانبار',
-                ];
+        // تەنها یەک جار پارە کەم بکەرەوە
+        $cash->addExpense($salary->amount);
 
-                $monthName = $monthNames[$salary->month] ?? 'مانگ ' . $salary->month;
+        // تۆمارکردنی مامەڵە لە خشتەی transactions - بەبێ دووبارە کردنی addExpense
+        $monthNames = [
+            '1' => 'ڕێبەندان', '2' => 'ڕەشەمە', '3' => 'نەورۆز',
+            '4' => 'گوڵان', '5' => 'جۆزەردان', '6' => 'پووشپەڕ',
+            '7' => 'گەلاوێژ', '8' => 'خەرمانان', '9' => 'ڕەزبەر',
+            '10' => 'گەڵاڕێزان', '11' => 'سەرماوەز', '12' => 'بەفرانبار',
+        ];
 
-                Transaction::recordTransaction([
-                    'type' => 'salary',
-                    'amount' => $salary->net_amount,
-                    'transactionable_type' => self::class,
-                    'transactionable_id' => $salary->id,
-                    'reference_number' => $salary->employee_id,
-                    'description' => 'مووچەی ' . ($salary->employee->name ?? 'کارمەند') . ' بۆ مانگی ' . $monthName . 'ی ' . $salary->year . ($salary->notes ? ' - ' . $salary->notes : ''),
-                    'transaction_date' => $salary->payment_date,
-                    'is_income' => false,
-                ]);
+        $monthName = $monthNames[$salary->month] ?? 'مانگ ' . $salary->month;
 
-            } catch (\Exception $e) {
-                Log::error('Error in Salary created event: ' . $e->getMessage());
-            }
-        });
+        // ڕاستەوخۆ Transaction دروست بکە، بەبێ بەکارهێنانی recordTransaction
+        // ئەگەر recordTransaction دووبارە addExpense بانگ دەکات
+        Transaction::create([
+            'type' => 'salary',
+            'amount' => $salary->amount,
+            'transactionable_type' => self::class,
+            'transactionable_id' => $salary->id,
+            'reference_number' => $salary->employee_id,
+            'description' => 'مووچەی ' . ($salary->employee->name ?? 'کارمەند') . ' بۆ مانگی ' . $monthName . 'ی ' . $salary->year . ($salary->notes ? ' - ' . $salary->notes : ''),
+            'transaction_date' => $salary->payment_date,
+            'is_income' => false,
+        ]);
+
+    } catch (\Exception $e) {
+        Log::error('Error in Salary created event: ' . $e->getMessage());
     }
+});
+    }
+
+
 }
