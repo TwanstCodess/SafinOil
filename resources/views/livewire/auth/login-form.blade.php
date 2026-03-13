@@ -1,4 +1,4 @@
-<div>
+<div dir="rtl">
     <form wire:submit="login" class="space-y-4">
         {{--  بەشی ئیمەیڵ --}}
         <div>
@@ -39,8 +39,8 @@
                     id="remember"
                     type="checkbox"
                     class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500"
-                >
-                <label for="remember" class="ml-2 block text-sm text-gray-900">بیرم بێت</label>
+                ><span class="m-1"></span>
+                <label for="remember" class="ml-2 block text-sm text-gray-900"> منت لە بیر بێت  </label>
             </div>
 
             @if (Route::has('password.request'))
