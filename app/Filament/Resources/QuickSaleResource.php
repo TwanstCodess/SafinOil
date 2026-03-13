@@ -998,7 +998,7 @@ Tables\Columns\TextColumn::make('total_liters')
                                 <div class="grid grid-cols-2 gap-2 mt-3">
                                     <div class="bg-gray-700 bg-opacity-50 rounded p-2">
                                         <span class="text-xs text-gray-400 block">کۆی گشتی لیتر</span>
-                                        <span class="text-green-400 font-bold text-sm">' . number_format(($totals['morning']['total_liters'] + $totals['evening']['total_liters'])*2) . ' لیتر</span>
+                                        <span class="text-green-400 font-bold text-sm">' .  number_format((($totals['morning']['total_liters'] + $totals['evening']['total_liters'])*2)*-1)  . ' لیتر</span>
                                     </div>
                                     <div class="bg-gray-700 bg-opacity-50 rounded p-2">
                                         <span class="text-xs text-gray-400 block">کۆی گشتی دینار</span>
@@ -1008,7 +1008,7 @@ Tables\Columns\TextColumn::make('total_liters')
                                 <div class="mt-2 pt-2 border-t border-gray-700">
                                     <div class="flex justify-between text-xs">
                                         <span class="text-gray-400">تێکڕای لیتر:</span>
-                                        <span class="font-bold text-green-400">' . number_format(($totals['morning']['total_liters'] + $totals['evening']['total_liters']) / max(1, ($totals['morning']['count'] + $totals['evening']['count']))) . ' لیتر/شەفت</span>
+                                        <span class="font-bold text-green-400">' . number_format((($totals['morning']['total_liters'] + $totals['evening']['total_liters'])*2)*-1) . ' لیتر</span>
                                     </div>
                                 </div>
                             </div>
