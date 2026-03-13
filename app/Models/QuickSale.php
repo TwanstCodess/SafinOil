@@ -197,8 +197,8 @@ class QuickSale extends Model
      *
      * IMPORTANT:
      * - خوێندنەوەکان (initial - final) = کۆی هەردوو لای پەمپ
-     * - فرۆشتنی ڕاستەقینە بۆ یەک شەفت = (initial - final) / 2
-     * - بڕی پارە = (initial - final) × نرخ / 2
+     * - لیتری فرۆشتن بۆ یەک شەفت = (initial - final) / 2   ← کۆگا
+     * - پارەی فرۆشتن بۆ قاسە    = (initial - final) × نرخ  ← تەواوی پارە *2
      */
     public function calculateSoldFromReadings(): array
     {
@@ -214,9 +214,11 @@ class QuickSale extends Model
             $finalVal   = floatval($final[$catId]   ?? 0);
             $fullDiff   = $initialVal - $finalVal;
 
-            // ✅ ÷ 2 چونکە خوێندنەوەکان کۆی هەردوو لای پەمپن
+            // ✅ لیتر ÷ 2 (بۆ یەک شەفت)
             $soldLiters = $fullDiff / 2;
-            $soldAmount = ($fullDiff * floatval($category->current_price)) / 2;
+
+            // ✅ پارە × 2 (تەواوی پارەی هەردوو لا)
+            $soldAmount = $fullDiff * floatval($category->current_price);
 
             $sold[$catId]  = $soldLiters;
             $totalAmount  += $soldAmount;
@@ -224,8 +226,8 @@ class QuickSale extends Model
         }
 
         $this->sold_data    = $sold;
-        $this->total_amount = $totalAmount;
-        $this->total_liters = $totalLiters;
+        $this->total_amount = $totalAmount; // ✅ پارەی تەواو (بەبێ ÷2)
+        $this->total_liters = $totalLiters; // ✅ لیتری شەفت (÷2)
 
         return compact('sold', 'totalAmount', 'totalLiters');
     }
@@ -265,10 +267,7 @@ class QuickSale extends Model
             return;
         }
 
-        // ✅ یەک جار بخوێنەوە — دەرەوەی لووپ
-        $cash = Cash::first();
-
-        // ✅ کۆی گشتی کەم بکەرەوە — یەک جار save
+        $cash               = Cash::first();
         $totalReverseAmount = 0;
 
         foreach ($previousTransactions as $transaction) {
@@ -288,10 +287,10 @@ class QuickSale extends Model
             }
         }
 
-        // ✅ یەک جار کەمی بکەرەوە
+        // ✅ Reverse پارەکەش *2 کەمی بکەرەوە — چونکە کاتی تۆمار *2 کرابوو
         if ($cash && $totalReverseAmount > 0) {
-            $cash->balance      -= $totalReverseAmount;
-            $cash->total_income -= $totalReverseAmount;
+            $cash->balance      -= ($totalReverseAmount * 2);
+            $cash->total_income -= ($totalReverseAmount * 2);
             $cash->last_update   = now();
             $cash->save();
         }
@@ -346,16 +345,16 @@ class QuickSale extends Model
         try {
             $this->reverseStockAndCashForPreviousTransactions();
 
+            // ✅ total_amount تۆمار دەکرێت بە تەواوی پارە (بەبێ ÷2)
             DB::table('quick_sales')->where('id', $this->id)->update([
                 'sold_data'    => json_encode($sold),
                 'differences'  => json_encode($differences),
-                'total_amount' => $this->total_amount,
-                'total_liters' => $this->total_liters,
+                'total_amount' => $this->total_amount, // ✅ *2 — پارەی تەواو
+                'total_liters' => $this->total_liters, // ✅ ÷2 — لیتری شەفت
             ]);
 
             $categories = Category::all()->keyBy('id');
 
-            // ✅ یەک جار قاسەکە بخوێنەوە
             $cash = Cash::first() ?? Cash::create([
                 'balance'       => 0,
                 'total_income'  => 0,
@@ -365,10 +364,9 @@ class QuickSale extends Model
                 'last_update'   => now(),
             ]);
 
-            // ✅ کۆی پارەکان کۆ بکەوە — دوای لووپ یەک جار save
             $totalCashToAdd = 0;
 
-            // گام ١: کۆگا کەم بکەرەوە بەپێی sold_data
+            // گام ١: کۆگا کەم بکەرەوە بەپێی sold_data (لیتر ÷2)
             foreach ($sold as $catId => $soldLiters) {
                 $soldLiters = floatval($soldLiters);
                 if ($soldLiters <= 0.01) continue;
@@ -377,7 +375,9 @@ class QuickSale extends Model
                 if (!$category) continue;
 
                 $pricePerLiter = floatval($category->current_price);
-                $totalPrice    = $soldLiters * $pricePerLiter;
+
+                // ✅ پارەی قاسە = لیتر × نرخ × 2
+                $totalPrice = $soldLiters * $pricePerLiter * 2;
 
                 $currentStock = floatval(DB::table('categories')->where('id', $catId)->value('stock_liters') ?? 0);
                 if ($currentStock < $soldLiters) {
@@ -386,7 +386,6 @@ class QuickSale extends Model
 
                 DB::table('categories')->where('id', $catId)->decrement('stock_liters', $soldLiters);
 
-                // ✅ تەنها Sale و Transaction — cash لێرەدا نەگۆڕدرێت
                 $this->recordSaleAndTransaction($totalPrice, $category, $soldLiters, 'quick_sale', $cash);
 
                 $totalCashToAdd += $totalPrice;
@@ -416,7 +415,9 @@ class QuickSale extends Model
                 if (!$category) continue;
 
                 $pricePerLiter = floatval($category->current_price);
-                $totalPrice    = $diff * $pricePerLiter;
+
+                // ✅ پارەی جیاوازی = لیتر × نرخ × 2
+                $totalPrice = $diff * $pricePerLiter * 2;
 
                 if ($diff > 0) {
                     $currentStock = floatval(DB::table('categories')->where('id', $catId)->value('stock_liters') ?? 0);
@@ -426,7 +427,6 @@ class QuickSale extends Model
 
                     DB::table('categories')->where('id', $catId)->decrement('stock_liters', $diff);
 
-                    // ✅ تەنها Sale و Transaction — cash لێرەدا نەگۆڕدرێت
                     $this->recordSaleAndTransaction($totalPrice, $category, $diff, 'quick_sale_difference', $cash);
 
                     $totalCashToAdd += $totalPrice;
@@ -452,11 +452,11 @@ class QuickSale extends Model
                 }
             }
 
-            // ✅ یەک جار قاسەکە نوێ بکەرەوە — هەرگیز دوو جار نابێت
+            // ✅ یەک جار قاسەکە نوێ بکەرەوە — پارەکە تێیدایە *2
             if ($totalCashToAdd > 0) {
                 $balanceBefore      = floatval($cash->balance);
-                $cash->balance      = $balanceBefore + $totalCashToAdd;
-                $cash->total_income = floatval($cash->total_income) + $totalCashToAdd;
+                $cash->balance      = $balanceBefore + $totalCashToAdd;      // ✅ *2 تێیدایە
+                $cash->total_income = floatval($cash->total_income) + $totalCashToAdd; // ✅ *2 تێیدایە
                 $cash->last_update  = now();
                 $cash->save();
 
@@ -479,8 +479,8 @@ class QuickSale extends Model
     }
 
     /**
-     * ✅ تەنها تۆمارکردنی Sale و Transaction
-     * قاسە لێرەدا نەگۆڕدرێت — لە applyDifferencesToStockAndCash یەک جار تۆمار دەکرێت
+     * تەنها تۆمارکردنی Sale و Transaction
+     * قاسە لێرەدا نەگۆڕدرێت
      */
     protected function recordSaleAndTransaction(
         float    $amount,
