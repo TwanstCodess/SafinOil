@@ -42,8 +42,8 @@ class EditQuickSale extends EditRecord
             $final    = floatval($data['final_readings'][$catId]   ?? 0);
             $fullDiff = $initial - $final;
 
-            // ✅ لیتر ÷ 2 (یەک شەفت)
-            $soldLiters = $fullDiff / 2;
+            // ✅ لیتر وەک خۆی (بەبێ ÷2)
+            $soldLiters = $fullDiff;
 
             // ✅ پارە × 2 (تەواوی پارەی هەردوو لا)
             $soldAmount = $fullDiff * floatval($category->current_price);
@@ -53,7 +53,7 @@ class EditQuickSale extends EditRecord
         }
 
         $data['total_amount'] = $totalAmount; // ✅ *2
-        $data['total_liters'] = $totalLiters; // ✅ ÷2
+        $data['total_liters'] = \$totalLiters; // ✅ لیتری تەواو (بەبێ ÷2)
 
         return $data;
     }
