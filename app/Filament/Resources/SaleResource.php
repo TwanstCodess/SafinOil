@@ -45,7 +45,7 @@ class SaleResource extends Resource
                                 Forms\Components\Select::make('payment_type')
                                     ->label('جۆری فرۆشتن')
                                     ->options([
-                                        'cash' => '💰 پارەی ڕاستەوخۆ',
+                                        'cash'   => '💰 پارەی ڕاستەوخۆ',
                                         'credit' => '📝 قەرز',
                                     ])
                                     ->required()
@@ -67,20 +67,12 @@ class SaleResource extends Resource
                                     ->required(fn (callable $get) => $get('payment_type') === 'credit')
                                     ->visible(fn (callable $get) => $get('payment_type') === 'credit')
                                     ->createOptionForm([
-                                        Forms\Components\TextInput::make('name')
-                                            ->label('ناوی کڕیار')
-                                            ->required(),
-                                        Forms\Components\TextInput::make('phone')
-                                            ->label('ژمارە مۆبایل')
-                                            ->tel(),
-                                        Forms\Components\TextInput::make('identity_number')
-                                            ->label('ژمارەی ناسنامە'),
-                                        Forms\Components\TextInput::make('vehicle_number')
-                                            ->label('ژمارەی ئۆتۆمۆبیل'),
+                                        Forms\Components\TextInput::make('name')->label('ناوی کڕیار')->required(),
+                                        Forms\Components\TextInput::make('phone')->label('ژمارە مۆبایل')->tel(),
+                                        Forms\Components\TextInput::make('identity_number')->label('ژمارەی ناسنامە'),
+                                        Forms\Components\TextInput::make('vehicle_number')->label('ژمارەی ئۆتۆمۆبیل'),
                                     ])
-                                    ->createOptionUsing(function (array $data) {
-                                        return Customer::create($data);
-                                    }),
+                                    ->createOptionUsing(fn (array $data) => Customer::create($data)),
                             ]),
 
                         Forms\Components\Grid::make(3)
@@ -96,15 +88,9 @@ class SaleResource extends Resource
                                             $set('price_per_liter', $category->current_price);
                                             $liters = $get('liters') ?? 0;
                                             $set('total_price', $liters * $category->current_price);
-
-                                            // پێشنیاری کۆگا
                                             $stock = $category->stock_liters ?? 0;
                                             if ($liters > $stock) {
-                                                Notification::make()
-                                                    ->warning()
-                                                    ->title('ئاگادار!')
-                                                    ->body("تەنها {$stock} لیتر لەم کاتیگۆرییە ماوە")
-                                                    ->send();
+                                                Notification::make()->warning()->title('ئاگادار!')->body("تەنها {$stock} لیتر لەم کاتیگۆرییە ماوە")->send();
                                             }
                                         }
                                     }),
@@ -117,18 +103,12 @@ class SaleResource extends Resource
                                     ->afterStateUpdated(function ($state, callable $set, callable $get) {
                                         $pricePerLiter = $get('price_per_liter') ?? 0;
                                         $set('total_price', $state * $pricePerLiter);
-
-                                        // پێشنیاری کۆگا
                                         $categoryId = $get('category_id');
                                         if ($categoryId) {
                                             $category = Category::find($categoryId);
                                             $stock = $category->stock_liters ?? 0;
                                             if ($state > $stock) {
-                                                Notification::make()
-                                                    ->warning()
-                                                    ->title('ئاگادار!')
-                                                    ->body("تەنها {$stock} لیتر لەم کاتیگۆرییە ماوە")
-                                                    ->send();
+                                                Notification::make()->warning()->title('ئاگادار!')->body("تەنها {$stock} لیتر لەم کاتیگۆرییە ماوە")->send();
                                             }
                                         }
                                     })
@@ -183,7 +163,6 @@ class SaleResource extends Resource
                                             ->content(function (callable $get) {
                                                 $customerId = $get('customer_id');
                                                 if (!$customerId) return '';
-
                                                 $customer = Customer::find($customerId);
                                                 if ($customer && $customer->current_debt > 0) {
                                                     return "⚠️ قەرزی پێشووی ئەم کڕیارە: " . number_format($customer->current_debt) . " دینار";
@@ -202,6 +181,9 @@ class SaleResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            // ✅ تەنها فرۆشی قەرز نیشان بدە
+            ->modifyQueryUsing(fn (Builder $query) => $query->where('payment_type', 'credit'))
+
             ->columns([
                 Tables\Columns\TextColumn::make('id')
                     ->label('ژمارە')
@@ -215,30 +197,13 @@ class SaleResource extends Resource
                     ->toggleable()
                     ->icon('heroicon-m-calendar'),
 
-                Tables\Columns\TextColumn::make('payment_type')
-                    ->label('جۆر')
-                    ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'cash' => 'success',
-                        'credit' => 'warning',
-                    })
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'cash' => '💰 ڕاستەوخۆ',
-                        'credit' => '📝 قەرز',
-                    })
-                    ->icon(fn (string $state): string => match ($state) {
-                        'cash' => 'heroicon-m-banknotes',
-                        'credit' => 'heroicon-m-credit-card',
-                    })
-                    ->sortable(),
+                // ✅ ستوونی جۆری فرۆشتن لاکرا — هەموو قەرزن
 
                 Tables\Columns\TextColumn::make('customer.name')
                     ->label('کڕیار')
                     ->searchable()
                     ->sortable()
-                    ->toggleable()
-                    ->icon('heroicon-m-user')
-                    ->visible(fn ($livewire): bool => $livewire->tableFilterState['payment_type'] ?? null === 'credit'),
+                    ->icon('heroicon-m-user'),
 
                 Tables\Columns\TextColumn::make('category.name')
                     ->label('کاتیگۆری')
@@ -275,25 +240,22 @@ class SaleResource extends Resource
                     ->color(fn ($record): string => $record?->status_color ?? 'gray')
                     ->formatStateUsing(fn ($record): string => $record?->status_label ?? '-')
                     ->icon(fn ($record): string => match ($record?->status) {
-                        'paid' => 'heroicon-m-check-circle',
+                        'paid'    => 'heroicon-m-check-circle',
                         'partial' => 'heroicon-m-clock',
                         'pending' => 'heroicon-m-x-circle',
-                        default => 'heroicon-m-question-mark-circle',
-                    })
-                    ->visible(fn ($record): bool => $record && $record->payment_type === 'credit'),
+                        default   => 'heroicon-m-question-mark-circle',
+                    }),
 
                 Tables\Columns\TextColumn::make('remaining_amount')
                     ->label('بڕی ماوە')
                     ->money('IQD')
                     ->color('danger')
-                    ->weight('bold')
-                    ->visible(fn ($record): bool => $record && $record->payment_type === 'credit' && $record->remaining_amount > 0),
+                    ->weight('bold'),
 
                 Tables\Columns\TextColumn::make('due_date')
                     ->label('وەستان')
                     ->date('Y/m/d')
-                    ->color(fn ($record): string => ($record && $record->due_date && $record->due_date->isPast()) ? 'danger' : 'gray')
-                    ->visible(fn ($record): bool => $record && $record->payment_type === 'credit'),
+                    ->color(fn ($record): string => ($record && $record->due_date && $record->due_date->isPast()) ? 'danger' : 'gray'),
 
                 Tables\Columns\TextColumn::make('paid_date')
                     ->label('ڕێکەوتی پارەدان')
@@ -301,21 +263,9 @@ class SaleResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
 
-            // **فلتەرە پڕۆفیشناڵەکان**
             ->filters([
-                // فلتەری جۆری فرۆشتن
-                SelectFilter::make('payment_type')
-                    ->label('جۆری فرۆشتن')
-                    ->options([
-                        'cash' => '💰 ڕاستەوخۆ',
-                        'credit' => '📝 قەرز',
-                    ])
-                    ->multiple()
-                    ->indicator('جۆر')
-                    ->placeholder('هەموو جۆرەکان')
-                    ->columnSpan(1),
+                // ✅ فلتەری جۆری فرۆشتن لاکرا
 
-                // فلتەری کڕیار
                 SelectFilter::make('customer_id')
                     ->label('کڕیار')
                     ->relationship('customer', 'name')
@@ -326,7 +276,6 @@ class SaleResource extends Resource
                     ->placeholder('هەموو کڕیاران')
                     ->columnSpan(2),
 
-                // فلتەری کاتیگۆری
                 SelectFilter::make('category_id')
                     ->label('کاتیگۆری')
                     ->relationship('category', 'name')
@@ -337,11 +286,10 @@ class SaleResource extends Resource
                     ->placeholder('هەموو کاتیگۆریەکان')
                     ->columnSpan(2),
 
-                // فلتەری ڕەوشت
                 SelectFilter::make('status')
                     ->label('ڕەوشتی قەرز')
                     ->options([
-                        'paid' => '✅ پارەدراوە',
+                        'paid'    => '✅ پارەدراوە',
                         'partial' => '⏳ بەشێکی پارەدراوە',
                         'pending' => '⏰ چاوەڕوانی پارەدان',
                     ])
@@ -350,90 +298,60 @@ class SaleResource extends Resource
                     ->placeholder('هەموو ڕەوشتەکان')
                     ->columnSpan(1),
 
-                // فلتەری مەودای بەرواری فرۆشتن
                 Filter::make('sale_date')
                     ->label('مەودای بەرواری فرۆشتن')
                     ->form([
-                        DatePicker::make('from')
-                            ->label('لە ڕێکەوتی')
-                            ->placeholder('YYYY-MM-DD'),
-                        DatePicker::make('until')
-                            ->label('تا ڕێکەوتی')
-                            ->placeholder('YYYY-MM-DD'),
+                        DatePicker::make('from')->label('لە ڕێکەوتی')->placeholder('YYYY-MM-DD'),
+                        DatePicker::make('until')->label('تا ڕێکەوتی')->placeholder('YYYY-MM-DD'),
                     ])
                     ->query(function (Builder $query, array $data) {
                         return $query
-                            ->when($data['from'], fn ($q) => $q->whereDate('sale_date', '>=', $data['from']))
+                            ->when($data['from'],  fn ($q) => $q->whereDate('sale_date', '>=', $data['from']))
                             ->when($data['until'], fn ($q) => $q->whereDate('sale_date', '<=', $data['until']));
                     })
                     ->indicateUsing(function (array $data) {
                         $indicators = [];
-                        if ($data['from'] ?? null) {
-                            $indicators[] = 'لە ' . \Carbon\Carbon::parse($data['from'])->format('Y/m/d');
-                        }
-                        if ($data['until'] ?? null) {
-                            $indicators[] = 'تا ' . \Carbon\Carbon::parse($data['until'])->format('Y/m/d');
-                        }
+                        if ($data['from']  ?? null) $indicators[] = 'لە ' . \Carbon\Carbon::parse($data['from'])->format('Y/m/d');
+                        if ($data['until'] ?? null) $indicators[] = 'تا ' . \Carbon\Carbon::parse($data['until'])->format('Y/m/d');
                         return $indicators ? 'بەرواری فرۆشتن: ' . implode(' - ', $indicators) : null;
                     })
-                    ->columns(2)
-                    ->columnSpan(2),
+                    ->columns(2)->columnSpan(2),
 
-                // فلتەری مەودای بەرواری وەستان
                 Filter::make('due_date')
                     ->label('مەودای بەرواری وەستان')
                     ->form([
-                        DatePicker::make('from')
-                            ->label('لە ڕێکەوتی')
-                            ->placeholder('YYYY-MM-DD'),
-                        DatePicker::make('until')
-                            ->label('تا ڕێکەوتی')
-                            ->placeholder('YYYY-MM-DD'),
+                        DatePicker::make('from')->label('لە ڕێکەوتی')->placeholder('YYYY-MM-DD'),
+                        DatePicker::make('until')->label('تا ڕێکەوتی')->placeholder('YYYY-MM-DD'),
                     ])
                     ->query(function (Builder $query, array $data) {
                         return $query
-                            ->when($data['from'], fn ($q) => $q->whereDate('due_date', '>=', $data['from']))
+                            ->when($data['from'],  fn ($q) => $q->whereDate('due_date', '>=', $data['from']))
                             ->when($data['until'], fn ($q) => $q->whereDate('due_date', '<=', $data['until']));
                     })
                     ->indicateUsing(function (array $data) {
                         $indicators = [];
-                        if ($data['from'] ?? null) {
-                            $indicators[] = 'لە ' . \Carbon\Carbon::parse($data['from'])->format('Y/m/d');
-                        }
-                        if ($data['until'] ?? null) {
-                            $indicators[] = 'تا ' . \Carbon\Carbon::parse($data['until'])->format('Y/m/d');
-                        }
+                        if ($data['from']  ?? null) $indicators[] = 'لە ' . \Carbon\Carbon::parse($data['from'])->format('Y/m/d');
+                        if ($data['until'] ?? null) $indicators[] = 'تا ' . \Carbon\Carbon::parse($data['until'])->format('Y/m/d');
                         return $indicators ? 'بەرواری وەستان: ' . implode(' - ', $indicators) : null;
                     })
-                    ->columns(2)
-                    ->columnSpan(2),
+                    ->columns(2)->columnSpan(2),
 
-                // فلتەری قەرزە بەسەرچووەکان
                 TernaryFilter::make('overdue')
                     ->label('قەرزە بەسەرچووەکان')
                     ->placeholder('هەموو')
                     ->trueLabel('بەسەرچووە')
                     ->falseLabel('بەسەرنەچووە')
                     ->queries(
-                        true: fn ($query) => $query->where('due_date', '<', now())->where('status', '!=', 'paid'),
+                        true:  fn ($query) => $query->where('due_date', '<', now())->where('status', '!=', 'paid'),
                         false: fn ($query) => $query->where('due_date', '>=', now())->orWhere('status', 'paid'),
                     )
                     ->indicator('بەسەرچوو'),
 
-                // فلتەری مەودای بڕی فرۆشتن (لیتر)
                 Filter::make('liters_range')
                     ->label('مەودای بڕ (لیتر)')
                     ->form([
-                        TextInput::make('min_liters')
-                            ->label('کەمترین بڕ')
-                            ->numeric()
-                            ->suffix('لیتر')
-                            ->placeholder('١٠'),
-                        TextInput::make('max_liters')
-                            ->label('زۆرترین بڕ')
-                            ->numeric()
-                            ->suffix('لیتر')
-                            ->placeholder('١٠٠٠'),
+                        TextInput::make('min_liters')->label('کەمترین بڕ')->numeric()->suffix('لیتر')->placeholder('١٠'),
+                        TextInput::make('max_liters')->label('زۆرترین بڕ')->numeric()->suffix('لیتر')->placeholder('١٠٠٠'),
                     ])
                     ->query(function (Builder $query, array $data) {
                         return $query
@@ -442,31 +360,17 @@ class SaleResource extends Resource
                     })
                     ->indicateUsing(function (array $data) {
                         $indicators = [];
-                        if ($data['min_liters'] ?? null) {
-                            $indicators[] = 'کەمتر نییە لە ' . number_format($data['min_liters']) . ' لیتر';
-                        }
-                        if ($data['max_liters'] ?? null) {
-                            $indicators[] = 'زیاتر نییە لە ' . number_format($data['max_liters']) . ' لیتر';
-                        }
+                        if ($data['min_liters'] ?? null) $indicators[] = 'کەمتر نییە لە ' . number_format($data['min_liters']) . ' لیتر';
+                        if ($data['max_liters'] ?? null) $indicators[] = 'زیاتر نییە لە ' . number_format($data['max_liters']) . ' لیتر';
                         return $indicators ? 'بڕ: ' . implode(' و ', $indicators) : null;
                     })
-                    ->columns(2)
-                    ->columnSpan(2),
+                    ->columns(2)->columnSpan(2),
 
-                // فلتەری مەودای کۆی گشتی
                 Filter::make('total_price_range')
                     ->label('مەودای کۆی گشتی')
                     ->form([
-                        TextInput::make('min_total')
-                            ->label('کەمترین کۆ')
-                            ->numeric()
-                            ->prefix('دینار')
-                            ->placeholder('١٠٠٠٠'),
-                        TextInput::make('max_total')
-                            ->label('زۆرترین کۆ')
-                            ->numeric()
-                            ->prefix('دینار')
-                            ->placeholder('١٠٠٠٠٠٠'),
+                        TextInput::make('min_total')->label('کەمترین کۆ')->numeric()->prefix('دینار')->placeholder('١٠٠٠٠'),
+                        TextInput::make('max_total')->label('زۆرترین کۆ')->numeric()->prefix('دینار')->placeholder('١٠٠٠٠٠٠'),
                     ])
                     ->query(function (Builder $query, array $data) {
                         return $query
@@ -475,31 +379,17 @@ class SaleResource extends Resource
                     })
                     ->indicateUsing(function (array $data) {
                         $indicators = [];
-                        if ($data['min_total'] ?? null) {
-                            $indicators[] = 'کەمتر نییە لە ' . number_format($data['min_total']) . ' د.ع';
-                        }
-                        if ($data['max_total'] ?? null) {
-                            $indicators[] = 'زیاتر نییە لە ' . number_format($data['max_total']) . ' د.ع';
-                        }
+                        if ($data['min_total'] ?? null) $indicators[] = 'کەمتر نییە لە ' . number_format($data['min_total']) . ' د.ع';
+                        if ($data['max_total'] ?? null) $indicators[] = 'زیاتر نییە لە ' . number_format($data['max_total']) . ' د.ع';
                         return $indicators ? 'کۆی گشتی: ' . implode(' و ', $indicators) : null;
                     })
-                    ->columns(2)
-                    ->columnSpan(2),
+                    ->columns(2)->columnSpan(2),
 
-                // فلتەری مەودای بڕی ماوە
                 Filter::make('remaining_amount_range')
                     ->label('مەودای بڕی ماوە')
                     ->form([
-                        TextInput::make('min_remaining')
-                            ->label('کەمترین بڕی ماوە')
-                            ->numeric()
-                            ->prefix('دینار')
-                            ->placeholder('٠'),
-                        TextInput::make('max_remaining')
-                            ->label('زۆرترین بڕی ماوە')
-                            ->numeric()
-                            ->prefix('دینار')
-                            ->placeholder('١٠٠٠٠٠٠'),
+                        TextInput::make('min_remaining')->label('کەمترین بڕی ماوە')->numeric()->prefix('دینار')->placeholder('٠'),
+                        TextInput::make('max_remaining')->label('زۆرترین بڕی ماوە')->numeric()->prefix('دینار')->placeholder('١٠٠٠٠٠٠'),
                     ])
                     ->query(function (Builder $query, array $data) {
                         return $query
@@ -508,61 +398,43 @@ class SaleResource extends Resource
                     })
                     ->indicateUsing(function (array $data) {
                         $indicators = [];
-                        if ($data['min_remaining'] ?? null) {
-                            $indicators[] = 'کەمتر نییە لە ' . number_format($data['min_remaining']) . ' د.ع';
-                        }
-                        if ($data['max_remaining'] ?? null) {
-                            $indicators[] = 'زیاتر نییە لە ' . number_format($data['max_remaining']) . ' د.ع';
-                        }
+                        if ($data['min_remaining'] ?? null) $indicators[] = 'کەمتر نییە لە ' . number_format($data['min_remaining']) . ' د.ع';
+                        if ($data['max_remaining'] ?? null) $indicators[] = 'زیاتر نییە لە ' . number_format($data['max_remaining']) . ' د.ع';
                         return $indicators ? 'بڕی ماوە: ' . implode(' و ', $indicators) : null;
                     })
-                    ->columns(2)
-                    ->columnSpan(2),
+                    ->columns(2)->columnSpan(2),
 
-                // فلتەری فرۆشتنی ئەمڕۆ
                 Filter::make('today')
-                    ->label('فرۆشتنی ئەمڕۆ')
-                    ->toggle()
+                    ->label('فرۆشتنی ئەمڕۆ')->toggle()
                     ->query(fn ($query) => $query->whereDate('sale_date', today()))
                     ->indicator('ئەمڕۆ'),
 
-                // فلتەری فرۆشتنی دوێنێ
                 Filter::make('yesterday')
-                    ->label('فرۆشتنی دوێنێ')
-                    ->toggle()
+                    ->label('فرۆشتنی دوێنێ')->toggle()
                     ->query(fn ($query) => $query->whereDate('sale_date', today()->subDay()))
                     ->indicator('دوێنێ'),
 
-                // فلتەری فرۆشتنی ئەم هەفتەیە
                 Filter::make('this_week')
-                    ->label('فرۆشتنی ئەم هەفتەیە')
-                    ->toggle()
+                    ->label('فرۆشتنی ئەم هەفتەیە')->toggle()
                     ->query(fn ($query) => $query->whereBetween('sale_date', [now()->startOfWeek(), now()->endOfWeek()]))
                     ->indicator('ئەم هەفتەیە'),
 
-                // فلتەری فرۆشتنی ئەم مانگە
                 Filter::make('this_month')
-                    ->label('فرۆشتنی ئەم مانگە')
-                    ->toggle()
-                    ->query(fn ($query) => $query->whereMonth('sale_date', now()->month)
-                        ->whereYear('sale_date', now()->year))
+                    ->label('فرۆشتنی ئەم مانگە')->toggle()
+                    ->query(fn ($query) => $query->whereMonth('sale_date', now()->month)->whereYear('sale_date', now()->year))
                     ->indicator('ئەم مانگە'),
 
-                // فلتەری فرۆشتنی ئەمساڵ
                 Filter::make('this_year')
-                    ->label('فرۆشتنی ئەمساڵ')
-                    ->toggle()
+                    ->label('فرۆشتنی ئەمساڵ')->toggle()
                     ->query(fn ($query) => $query->whereYear('sale_date', now()->year))
                     ->indicator('ئەمساڵ'),
             ])
 
-            // ڕێکخستنی فلتەرەکان
             ->filtersLayout(FiltersLayout::Modal)
             ->filtersFormColumns(2)
             ->filtersFormWidth('lg')
             ->persistFiltersInSession()
 
-            // دوگمەی فلتەر
             ->filtersTriggerAction(
                 fn ($action) => $action
                     ->button()
@@ -575,136 +447,99 @@ class SaleResource extends Resource
             ->actions([
                 Tables\Actions\ActionGroup::make([
                     Tables\Actions\ViewAction::make()
-                        ->label('بینین')
-                        ->icon('heroicon-m-eye')
-                        ->color('info'),
+                        ->label('بینین')->icon('heroicon-m-eye')->color('info'),
 
                     Tables\Actions\EditAction::make()
-                        ->label('دەستکاری')
-                        ->icon('heroicon-m-pencil')
-                        ->color('warning')
-                        ->visible(fn ($record): bool => $record && ($record->payment_type === 'cash' || $record->status === 'pending')),
+                        ->label('دەستکاری')->icon('heroicon-m-pencil')->color('warning')
+                        ->visible(fn ($record): bool => $record && $record->status === 'pending'),
 
                     Action::make('receive_payment')
-    ->label('وەرگرتنی پارە')
-    ->icon('heroicon-m-currency-dollar')
-    ->color(Color::Green)
-    ->form([
-        Forms\Components\TextInput::make('amount')
-            ->label('بڕی پارە')
-            ->numeric()
-            ->required()
-            ->prefix('دینار')
-            ->minValue(1000)
-            ->maxValue(fn ($record) => $record?->remaining_amount ?? 0)
-            ->mask(RawJs::make('$money($input)')),
-        Forms\Components\Select::make('payment_method')
-            ->label('شێوازی پارەدان')
-            ->options([
-                'cash' => '💰 پارەی ڕاستەوخۆ',
-                'bank' => '🏦 بانک',
-                'cheque' => '📝 چێک',
-            ])
-            ->required(),
-        Forms\Components\DatePicker::make('payment_date')
-            ->label('ڕێکەوتی پارەدان')
-            ->default(now())
-            ->required(),
-        Forms\Components\Textarea::make('notes')
-            ->label('تێبینی')
-            ->maxLength(255),
-    ])
-    ->action(function (array $data, $record): void {
-        try {
-            // دروستکردنی CreditPayment
-            $payment = $record->creditPayments()->create([
-                'customer_id' => $record->customer_id,
-                'amount' => $data['amount'],
-                'payment_date' => $data['payment_date'],
-                'payment_method' => $data['payment_method'],
-                'notes' => $data['notes'] ?? null,
-            ]);
+                        ->label('وەرگرتنی پارە')
+                        ->icon('heroicon-m-currency-dollar')
+                        ->color(Color::Green)
+                        ->form([
+                            Forms\Components\TextInput::make('amount')
+                                ->label('بڕی پارە')->numeric()->required()->prefix('دینار')
+                                ->minValue(1000)
+                                ->maxValue(fn ($record) => $record?->remaining_amount ?? 0)
+                                ->mask(RawJs::make('$money($input)')),
+                            Forms\Components\Select::make('payment_method')
+                                ->label('شێوازی پارەدان')
+                                ->options([
+                                    'cash'   => '💰 پارەی ڕاستەوخۆ',
+                                    'bank'   => '🏦 بانک',
+                                    'cheque' => '📝 چێک',
+                                ])
+                                ->required(),
+                            Forms\Components\DatePicker::make('payment_date')
+                                ->label('ڕێکەوتی پارەدان')->default(now())->required(),
+                            Forms\Components\Textarea::make('notes')
+                                ->label('تێبینی')->maxLength(255),
+                        ])
+                        ->action(function (array $data, $record): void {
+                            try {
+                                $payment = $record->creditPayments()->create([
+                                    'customer_id'    => $record->customer_id,
+                                    'amount'         => $data['amount'],
+                                    'payment_date'   => $data['payment_date'],
+                                    'payment_method' => $data['payment_method'],
+                                    'notes'          => $data['notes'] ?? null,
+                                ]);
 
-            // نوێکردنەوەی ڕەوشتی فرۆشتن
-            $record->paid_amount += $data['amount'];
-            $record->remaining_amount -= $data['amount'];
+                                $record->paid_amount      += $data['amount'];
+                                $record->remaining_amount -= $data['amount'];
 
-            if ($record->remaining_amount <= 0) {
-                $record->status = 'paid';
-                $record->paid_date = $data['payment_date'];
-            } else {
-                $record->status = 'partial';
-            }
-            $record->save();
+                                if ($record->remaining_amount <= 0) {
+                                    $record->status    = 'paid';
+                                    $record->paid_date = $data['payment_date'];
+                                } else {
+                                    $record->status = 'partial';
+                                }
+                                $record->save();
 
-            // نوێکردنەوەی قەرزی کڕیار
-            $record->customer->updateDebt();
+                                $record->customer->updateDebt();
 
-            // تۆمارکردنی مامەڵە لە Transaction بەبێ کاریگەری لەسەر قاسە
-            $balanceBefore = 0;
-            $balanceAfter = 0;
+                                $cash = \App\Models\Cash::first();
+                                \App\Models\Transaction::create([
+                                    'transaction_number'   => \App\Models\Transaction::generateTransactionNumber(),
+                                    'type'                 => 'credit_payment',
+                                    'amount'               => $data['amount'],
+                                    'balance_before'       => $cash?->balance ?? 0,
+                                    'balance_after'        => $cash?->balance ?? 0,
+                                    'transactionable_type' => 'App\\Models\\CreditPayment',
+                                    'transactionable_id'   => $payment->id,
+                                    'reference_number'     => $record->id,
+                                    'description'          => 'وەرگرتنی پارەی قەرز - ' . number_format($data['amount']) . ' د.ع (' . ($record->customer->name ?? 'نادیار') . ')',
+                                    'transaction_date'     => $data['payment_date'],
+                                    'created_by'           => auth()->user()?->name ?? 'سیستەم',
+                                ]);
 
-            $cash = \App\Models\Cash::first();
-            if ($cash) {
-                $balanceBefore = $cash->balance;
-                $balanceAfter = $cash->balance; // هیچ گۆڕانکارییەک نییە
-            }
+                                Notification::make()->title('پارە بە سەرکەوتوویی وەرگیرا')->success()
+                                    ->body('بڕی ' . number_format($data['amount']) . ' دینار وەرگیرا')->send();
 
-            \App\Models\Transaction::create([
-                'transaction_number' => \App\Models\Transaction::generateTransactionNumber(),
-                'type' => 'credit_payment',
-                'amount' => $data['amount'],
-                'balance_before' => $balanceBefore,
-                'balance_after' => $balanceAfter,
-                'transactionable_type' => 'App\\Models\\CreditPayment',
-                'transactionable_id' => $payment->id,
-                'reference_number' => $record->id,
-                'description' => 'وەرگرتنی پارەی قەرز - ' . number_format($data['amount']) . ' د.ع ' .
-                                 '(' . ($record->customer->name ?? 'نادیار') . ')',
-                'transaction_date' => $data['payment_date'],
-                'created_by' => auth()->user()?->name ?? 'سیستەم',
-            ]);
-
-            Notification::make()
-                ->title('پارە بە سەرکەوتوویی وەرگیرا')
-                ->success()
-                ->body('بڕی ' . number_format($data['amount']) . ' دینار وەرگیرا')
-                ->send();
-
-        } catch (\Exception $e) {
-            Notification::make()
-                ->title('هەڵە!')
-                ->body($e->getMessage())
-                ->danger()
-                ->send();
-        }
-    })
-    ->visible(fn ($record): bool =>
-        $record &&
-        $record->payment_type === 'credit' &&
-        $record->remaining_amount > 0
-    )
-    ->modalHeading('وەرگرتنی پارەی قەرز')
-    ->modalIcon('heroicon-o-currency-dollar')
-    ->modalSubmitActionLabel('وەرگرتنی پارە')
-    ->modalCancelActionLabel('پاشەکشە'),
+                            } catch (\Exception $e) {
+                                Notification::make()->title('هەڵە!')->body($e->getMessage())->danger()->send();
+                            }
+                        })
+                        ->visible(fn ($record): bool => $record && $record->remaining_amount > 0)
+                        ->modalHeading('وەرگرتنی پارەی قەرز')
+                        ->modalIcon('heroicon-o-currency-dollar')
+                        ->modalSubmitActionLabel('وەرگرتنی پارە')
+                        ->modalCancelActionLabel('پاشەکشە'),
 
                     Action::make('view_payments')
                         ->label('مێژووی پارەدان')
                         ->icon('heroicon-m-clock')
                         ->color(Color::Blue)
-                        ->url(fn ($record): string => $record ? route('filament.admin.resources.credit-payments.index', ['sale_id' => $record->id]) : '#')
-                        ->visible(fn ($record): bool => $record && $record->payment_type === 'credit'),
+                        ->url(fn ($record): string => $record ? route('filament.admin.resources.credit-payments.index', ['sale_id' => $record->id]) : '#'),
 
                     Tables\Actions\DeleteAction::make()
-                        ->label('سڕینەوە')
-                        ->icon('heroicon-m-trash')
-                        ->color('danger')
+                        ->label('سڕینەوە')->icon('heroicon-m-trash')->color('danger')
                         ->modalHeading('سڕینەوەی فرۆشتن')
                         ->modalDescription('دڵنیای لە سڕینەوەی ئەم فرۆشتنە؟')
                         ->modalSubmitActionLabel('بەڵێ، بسڕەوە')
                         ->modalCancelActionLabel('نەخێر')
-                        ->visible(fn ($record): bool => $record && ($record->payment_type === 'cash' || $record->status === 'pending')),
+                        ->visible(fn ($record): bool => $record && $record->status === 'pending'),
                 ])
                 ->label('کردارەکان')
                 ->icon('heroicon-m-ellipsis-vertical')
@@ -727,9 +562,7 @@ class SaleResource extends Resource
             ->emptyStateHeading('هیچ فرۆشتنێک نییە')
             ->emptyStateDescription('یەکەم فرۆشتن تۆمار بکە بۆ دەستپێکردن')
             ->emptyStateActions([
-                Tables\Actions\CreateAction::make()
-                    ->label('فرۆشتنێکی نوێ')
-                    ->icon('heroicon-m-plus'),
+                Tables\Actions\CreateAction::make()->label('فرۆشتنێکی نوێ')->icon('heroicon-m-plus'),
             ])
 
             ->defaultSort('sale_date', 'desc')
@@ -739,24 +572,22 @@ class SaleResource extends Resource
 
     public static function getRelations(): array
     {
+        return [];
+    }
+
+    public static function getPages(): array
+    {
         return [
-            //
+            'index'  => Pages\ListSales::route('/'),
+            'create' => Pages\CreateSale::route('/create'),
+            'view'   => Pages\ViewSale::route('/{record}'),
+            'edit'   => Pages\EditSale::route('/{record}/edit'),
         ];
     }
 
-public static function getPages(): array
-{
-    return [
-        'index' => Pages\ListSales::route('/'),
-        'create' => Pages\CreateSale::route('/create'),
-        'view' => Pages\ViewSale::route('/{record}'),
-        'edit' => Pages\EditSale::route('/{record}/edit'),
-    ];
-}
-
     public static function getNavigationBadge(): ?string
     {
-        $todaySales = static::getModel()::whereDate('sale_date', today())->count();
+        $todaySales = static::getModel()::where('payment_type', 'credit')->whereDate('sale_date', today())->count();
         return $todaySales > 0 ? (string) $todaySales : null;
     }
 
