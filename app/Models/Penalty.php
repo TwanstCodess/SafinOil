@@ -26,6 +26,7 @@ class Penalty extends Model
         return $this->belongsTo(Employee::class);
     }
 
+
     public function transaction()
     {
         return $this->morphOne(Transaction::class, 'transactionable');

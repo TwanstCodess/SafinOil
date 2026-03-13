@@ -43,6 +43,12 @@ class Sale extends Model
         return $this->belongsTo(Customer::class);
     }
 
+    // لە نێو کلاسەکەدا زیاد بکە:
+public function employee(): BelongsTo
+{
+    return $this->belongsTo(Employee::class);
+}
+
     public function creditPayments(): HasMany
     {
         return $this->hasMany(CreditPayment::class);

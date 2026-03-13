@@ -46,6 +46,7 @@ class Salary extends Model
         return $this->morphOne(Transaction::class, 'transactionable');
     }
 
+
     protected static function booted()
     {
         static::creating(function ($salary) {
