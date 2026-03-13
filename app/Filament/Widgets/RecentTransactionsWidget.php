@@ -33,15 +33,22 @@ class RecentTransactionsWidget extends BaseWidget
                     ->color(fn ($record): string => $record->type_color)
                     ->formatStateUsing(fn ($record): string => $record->type_label),
 
+                // ✅ فرۆشی خێرا → بڕ × 2
                 Tables\Columns\TextColumn::make('amount')
                     ->label('بڕ')
-                    ->money('IQD')
+                    ->formatStateUsing(function ($state, Transaction $record): string {
+                        $amount = in_array($record->type, ['quick_sale', 'quick_sale_difference'])
+                            ? floatval($state) * 2
+                            : floatval($state);
+                        return number_format(abs($amount)) . ' د.ع';
+                    })
                     ->color(fn ($record): string => $record->is_income ? 'success' : 'danger')
                     ->weight('bold'),
 
                 Tables\Columns\TextColumn::make('description')
                     ->label('وەسف')
-                    ->limit(40),
+                    ->limit(40)
+                    ->tooltip(fn ($state): string => $state ?? ''),
 
                 Tables\Columns\TextColumn::make('transaction_date')
                     ->label('ڕێکەوت')
@@ -49,10 +56,9 @@ class RecentTransactionsWidget extends BaseWidget
 
                 Tables\Columns\TextColumn::make('balance_after')
                     ->label('قاسە دوای')
-                    ->money('IQD')
+                    ->formatStateUsing(fn ($state): string => number_format(abs(floatval($state))) . ' د.ع')
                     ->color('primary'),
             ])
-
             ->paginated(false);
     }
 }

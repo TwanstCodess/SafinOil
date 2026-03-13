@@ -15,15 +15,13 @@ class EmployeeStatsWidget extends BaseWidget
     protected function getStats(): array
     {
         $activeEmployees = Employee::where('is_active', true)->count();
-        $totalEmployees = Employee::count();
+        $totalEmployees  = Employee::count();
 
         $thisMonthSalaries = Salary::whereMonth('payment_date', Carbon::now()->month)
             ->whereYear('payment_date', Carbon::now()->year)
             ->sum('net_amount');
 
-        $avgSalary = $activeEmployees > 0
-            ? $thisMonthSalaries / $activeEmployees
-            : 0;
+        $avgSalary = $activeEmployees > 0 ? $thisMonthSalaries / $activeEmployees : 0;
 
         return [
             Stat::make('کارمەندانی چالاک', $activeEmployees . ' لە ' . $totalEmployees)
@@ -31,25 +29,23 @@ class EmployeeStatsWidget extends BaseWidget
                 ->descriptionIcon('heroicon-m-users')
                 ->color('success'),
 
-            Stat::make('کۆی مووچەی ئەم مانگە', $this->formatMoney($thisMonthSalaries))
-                ->description('مووچەی مانگ')
+            Stat::make('کۆی مووچەی ئەم مانگە', $this->fmt($thisMonthSalaries))
+                ->description('مووچەی مانگ ' . Carbon::now()->format('m/Y'))
                 ->descriptionIcon('heroicon-m-currency-dollar')
                 ->color('warning'),
 
-            Stat::make('تێکڕای مووچە', $this->formatMoney($avgSalary))
+            Stat::make('تێکڕای مووچە', $this->fmt($avgSalary))
                 ->description('بۆ هەر کارمەندێک')
                 ->descriptionIcon('heroicon-m-chart-bar')
                 ->color('info'),
         ];
     }
 
-    private function formatMoney($amount)
+    private function fmt(float $amount): string
     {
-        if ($amount >= 1000000) {
-            return number_format($amount / 1000000, 2) . ' ملیۆن';
-        } elseif ($amount >= 1000) {
-            return number_format($amount / 1000, 2) . ' هەزار';
-        }
+        $amount = abs($amount);
+        if ($amount >= 1_000_000) return number_format($amount / 1_000_000, 2) . ' ملیۆن';
+        if ($amount >= 1_000)     return number_format($amount / 1_000, 1) . ' هەزار';
         return number_format($amount);
     }
 }

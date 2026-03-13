@@ -70,7 +70,6 @@ class AdminPanelProvider extends PanelProvider
 
             // **ویجێتەکان**
             ->widgets([
-                Widgets\AccountWidget::class,
                 \App\Filament\Widgets\FinancialOverviewWidget::class,
                 \App\Filament\Widgets\SalesPurchasesChartWidget::class,
                 \App\Filament\Widgets\ExpenseBreakdownWidget::class,
@@ -78,6 +77,7 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Widgets\StockLevelWidget::class,
                 \App\Filament\Widgets\EmployeeStatsWidget::class,
                 \App\Filament\Widgets\RecentTransactionsWidget::class,
+                \App\Filament\Widgets\ProfitStatsWidget::class,
             ])
 
             ->middleware([

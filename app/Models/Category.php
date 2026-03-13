@@ -11,20 +11,26 @@ class Category extends Model
     protected $table = 'categories';
 
     protected $fillable = [
-        'name',
-        'type_id',
-        'current_price',
-        'purchase_price',
-        'stock_liters',
+        'name', 'type_id', 'current_price', 'purchase_price', 'stock_liters',
     ];
 
     protected $casts = [
         'current_price'  => 'decimal:2',
         'purchase_price' => 'decimal:2',
-        // *** چارەسەر: decimal:2 بەکاربێنە نەک integer ***
-        // چونکە migration دا decimal(15,2) دەبێت
         'stock_liters'   => 'decimal:2',
     ];
+
+    // ✅ قازانجی هەر لیترێک
+    public function getProfitPerLiterAttribute(): float
+    {
+        return floatval($this->current_price) - floatval($this->purchase_price);
+    }
+
+    // ✅ قازانجی فۆرمات بووی هەر لیترێک
+    public function getFormattedProfitPerLiterAttribute(): string
+    {
+        return number_format($this->profit_per_liter) . ' د.ع / لیتر';
+    }
 
     public function type(): BelongsTo
     {
@@ -42,37 +48,23 @@ class Category extends Model
     }
 
     /**
-     * نوێکردنەوەی کۆگا
-     *
-     * *** چارەسەر: DB::table بەکاربێنە بەجیاتی $this->save() ***
-     * ئەمە دڵنیادەکات کە بەهاکە ڕاستەوخۆ لە DB نوێدەبێت
-     * و کێشەی integer/decimal تایپ نابێت
+     * نوێکردنەوەی کۆگا بە شێوازی ئاتۆمیک
      */
     public function updateStock(float $liters, string $type = 'add'): static
     {
-        if ($liters <= 0) {
-            return $this;
-        }
+        if ($liters <= 0) return $this;
 
         if ($type === 'add') {
-            // زیادکردن بەشێوەی ئاتۆمیک لە DB
             \Illuminate\Support\Facades\DB::table('categories')
                 ->where('id', $this->id)
                 ->increment('stock_liters', $liters);
-
-            $this->stock_liters = floatval($this->stock_liters) + $liters;
         } else {
-            // کەمکردنەوە بەشێوەی ئاتۆمیک لە DB
             \Illuminate\Support\Facades\DB::table('categories')
                 ->where('id', $this->id)
                 ->decrement('stock_liters', $liters);
-
-            $this->stock_liters = floatval($this->stock_liters) - $liters;
         }
 
-        // نوێکردنەوەی مۆدێل لە DB بۆ ئەوەی stock_liters نوێترین بەها بێت
         $this->refresh();
-
         return $this;
     }
 
